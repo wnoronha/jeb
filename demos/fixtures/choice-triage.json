@@ -1,0 +1,14 @@
+{
+  "state": "On-call: payment webhooks failing; customers cannot checkout.",
+  "questions": {
+    "triage": {
+      "type": "choice",
+      "instructions": "What is the best immediate action?",
+      "criteria": {
+        "rollback": "Roll back the deploy",
+        "restart": "Restart payment workers",
+        "scale": "Scale checkout API replicas"
+      }
+    }
+  }
+}

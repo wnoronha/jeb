@@ -4,6 +4,8 @@ Run [EmbeddingGemma 2](https://ai.google.dev/gemma/docs/embeddinggemma/model_car
 
 Local mode turns each `choice`, `noul`, and `score` question into **classification-style embedding comparisons** (cosine similarity + softmax). Results use the same JSON shape as cloud mode, but probabilities are **similarity-derived**, not Jev-calibrated.
 
+**Demo:** [asciinema — jeb local backend](https://asciinema.org/a/6pEADiZhEdSdhIff)
+
 ---
 
 ## 1. Install LiteRT-LM and import the model

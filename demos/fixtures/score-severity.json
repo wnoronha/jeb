@@ -1,0 +1,10 @@
+{
+  "state": "Status page: intermittent latency on EU region.",
+  "questions": {
+    "severity": {
+      "type": "score",
+      "instructions": "How severe is the incident?",
+      "criteria": ["Low", "Medium", "High", "Critical"]
+    }
+  }
+}

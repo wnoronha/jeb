@@ -41,6 +41,8 @@ export TYPESAFE_BASE_URL="https://api.typesafe.ai" # default: https://api.typesa
 
 Run EmbeddingGemma 2 via `litert-lm serve` and evaluate without a cloud API key. See [LiteRT local guide](docs/LITERT_LOCAL.md).
 
+[![Demo: jeb local backend](https://asciinema.org/a/6pEADiZhEdSdhIff.svg)](https://asciinema.org/a/6pEADiZhEdSdhIff)
+
 ```bash
 ./scripts/bootstrap-litert-local.sh setup   # optional: install LiteRT-LM + import model
 ./scripts/bootstrap-litert-local.sh serve   # in another terminal

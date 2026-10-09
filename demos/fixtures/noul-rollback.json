@@ -1,0 +1,9 @@
+{
+  "state": "Production API 5xx rate spiked right after deploy v2.4.",
+  "questions": {
+    "rollback": {
+      "type": "noul",
+      "instructions": "Should we roll back to the previous release immediately?"
+    }
+  }
+}
