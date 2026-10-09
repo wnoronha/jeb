@@ -1,11 +1,13 @@
 //! `jeb` — CLI tool to make quick decisions with TypeSafe AI's System One API.
 
 mod client;
+mod local;
 mod types;
 
 use anyhow::{bail, Context, Result};
 use clap::{ArgAction, Parser};
 use client::TypeSafeClient;
+use local::LocalEmbeddingClient;
 use std::collections::BTreeMap;
 use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
@@ -30,6 +32,35 @@ struct Cli {
     /// Model to use for evaluation
     #[arg(short, long, env = "TYPESAFE_MODEL", default_value = "jev-latest")]
     model: String,
+
+    /// Evaluation backend: `cloud` (TypeSafe Jev) or `local` (LiteRT-LM embeddings)
+    #[arg(
+        long,
+        env = "JEB_BACKEND",
+        default_value = "cloud",
+        value_name = "cloud|local"
+    )]
+    backend: String,
+
+    /// LiteRT-LM OpenAI-compatible embeddings server (local backend only)
+    #[arg(
+        long,
+        env = "LITERT_EMBED_URL",
+        default_value = "http://127.0.0.1:9379"
+    )]
+    litert_embed_url: String,
+
+    /// Model id for `/v1/embeddings` (local backend only)
+    #[arg(
+        long,
+        env = "LITERT_MODEL",
+        default_value = "embedding-gemma-v2-text.litertlm,cpu"
+    )]
+    litert_model: String,
+
+    /// Softmax temperature over embedding cosine similarities (local backend only)
+    #[arg(long, env = "LITERT_SIMILARITY_TEMPERATURE", default_value = "0.07")]
+    litert_temperature: f64,
 
     /// TypeSafe API key
     #[arg(short = 'k', long, env = "TYPESAFE_API_KEY")]
@@ -86,17 +117,29 @@ fn main() -> Result<()> {
 
     let request = parse_request(&cli)?;
 
-    let api_key = cli
-        .api_key
-        .filter(|k| !k.trim().is_empty())
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Missing TypeSafe API key. Set TYPESAFE_API_KEY environment variable or pass --api-key."
-            )
-        })?;
-
-    let client = TypeSafeClient::new(api_key, Some(cli.base_url), cli.timeout)?;
-    let response = client.evaluate(&request)?;
+    let response = match parse_backend(&cli.backend)? {
+        BackendMode::Cloud => {
+            let api_key = cli
+                .api_key
+                .filter(|k| !k.trim().is_empty())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Missing TypeSafe API key. Set TYPESAFE_API_KEY environment variable or pass --api-key."
+                    )
+                })?;
+            let client = TypeSafeClient::new(api_key, Some(cli.base_url), cli.timeout)?;
+            client.evaluate(&request)?
+        }
+        BackendMode::Local => {
+            let client = LocalEmbeddingClient::new(
+                cli.litert_embed_url.clone(),
+                cli.litert_model.clone(),
+                cli.litert_temperature,
+                cli.timeout,
+            )?;
+            client.evaluate(&request)?
+        }
+    };
 
     if cli.decision_only {
         print_decision_summary(&response, cli.pretty)?;
@@ -109,9 +152,24 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+enum BackendMode {
+    Cloud,
+    Local,
+}
+
+fn parse_backend(raw: &str) -> Result<BackendMode> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "cloud" | "typesafe" => Ok(BackendMode::Cloud),
+        "local" | "litert" | "litert-lm" => Ok(BackendMode::Local),
+        other => bail!(
+            "Unknown --backend '{}'. Expected 'cloud' or 'local'.",
+            other
+        ),
+    }
+}
+
 /// Parses CLI inputs into a validated `SystemOneRequest`.
 fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
-    // 1. If quick CLI flags are provided, construct request from flags
     if let Some(state_raw) = &cli.state {
         let state_val = serde_json::from_str::<serde_json::Value>(state_raw)
             .unwrap_or_else(|_| serde_json::Value::String(state_raw.clone()));
@@ -188,14 +246,12 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
         });
     }
 
-    // 2. If file is passed
     if let Some(path) = &cli.file {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read JSON file from {}", path.display()))?;
         return parse_json_payload(&content, &cli.model);
     }
 
-    // 3. If input arg is passed
     if let Some(input) = &cli.input {
         if input == "-" {
             let mut buffer = String::new();
@@ -208,7 +264,6 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
         }
     }
 
-    // 4. If stdin is piped
     if !io::stdin().is_terminal() {
         let mut buffer = String::new();
         io::stdin()
@@ -222,7 +277,6 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
     bail!("No input provided. Provide JSON as an argument, pipe through stdin, use --file, or specify --state and question flags.");
 }
 
-/// Parses raw JSON string and sets fallback model if omitted.
 fn parse_json_payload(raw: &str, default_model: &str) -> Result<SystemOneRequest> {
     let mut val: serde_json::Value =
         serde_json::from_str(raw).context("Invalid JSON payload passed to jeb")?;
@@ -241,7 +295,6 @@ fn parse_json_payload(raw: &str, default_model: &str) -> Result<SystemOneRequest
     Ok(req)
 }
 
-/// Splits flag input of format `id:instructions` into constituent parts.
 fn split_id_and_instructions(spec: &str, qtype: &str) -> Result<(String, String)> {
     if let Some((id, inst)) = spec.split_once(':') {
         Ok((id.trim().to_string(), inst.trim().to_string()))
@@ -254,7 +307,6 @@ fn split_id_and_instructions(spec: &str, qtype: &str) -> Result<(String, String)
     }
 }
 
-/// Formats and outputs the top decision summary.
 fn print_decision_summary(response: &SystemOneResponse, pretty: bool) -> Result<()> {
     let mut decisions = BTreeMap::new();
 
@@ -368,6 +420,10 @@ mod tests {
             input: None,
             file: None,
             model: "jev-latest".to_string(),
+            backend: "cloud".to_string(),
+            litert_embed_url: "http://127.0.0.1:9379".to_string(),
+            litert_model: "embedding-gemma-v2-text.litertlm,cpu".to_string(),
+            litert_temperature: 0.07,
             api_key: Some("dummy-key".to_string()),
             base_url: "https://api.typesafe.ai".to_string(),
             timeout: 30,
@@ -388,6 +444,23 @@ mod tests {
         assert_eq!(req.questions.len(), 2);
         assert!(req.questions.contains_key("intent"));
         assert!(req.questions.contains_key("is_clear"));
+    }
+
+    #[test]
+    fn test_parse_backend_aliases() {
+        assert!(matches!(
+            parse_backend("cloud").unwrap(),
+            BackendMode::Cloud
+        ));
+        assert!(matches!(
+            parse_backend("local").unwrap(),
+            BackendMode::Local
+        ));
+        assert!(matches!(
+            parse_backend("litert-lm").unwrap(),
+            BackendMode::Local
+        ));
+        assert!(parse_backend("invalid").is_err());
     }
 
     #[test]

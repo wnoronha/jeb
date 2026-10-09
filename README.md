@@ -37,6 +37,17 @@ export TYPESAFE_MODEL="jev-latest"               # default: jev-latest
 export TYPESAFE_BASE_URL="https://api.typesafe.ai" # default: https://api.typesafe.ai
 ```
 
+### Local (offline) with LiteRT-LM
+
+Run EmbeddingGemma 2 via `litert-lm serve` and evaluate without a cloud API key. See [LiteRT local guide](docs/LITERT_LOCAL.md).
+
+```bash
+./scripts/bootstrap-litert-local.sh setup   # optional: install LiteRT-LM + import model
+./scripts/bootstrap-litert-local.sh serve   # in another terminal
+export JEB_BACKEND=local
+jeb --state "..." --noul "is_safe:Is this safe?" -d
+```
+
 ---
 
 ## Usage
@@ -120,6 +131,7 @@ Output:
 - [API Reference](docs/API_REFERENCE.md) — Payload schema and response format
 - [CLI Reference](docs/CLI_REFERENCE.md) — Available flags and options
 - [Use Cases](docs/USE_CASES.md) — Examples for devops, data, finance, and agents
+- [LiteRT local](docs/LITERT_LOCAL.md) — On-device EmbeddingGemma 2 via `litert-lm serve`
 - [Skill Definition](docs/SKILL.md) — Agent tool specification
 
 ---
