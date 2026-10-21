@@ -231,3 +231,73 @@ jeb \
   --level "Normal,Elevated,Degraded,Hazardous" \
   -d
 ```
+
+---
+
+## 6. Model Evaluation & Benchmarking (Multi-Model Decision Matrix)
+
+Compare how different decision models evaluate identical request fixtures (`fixtures/req_*.json`) using cached responses in `fixtures/typesafe/` and `fixtures/openrouter/` (mapped in `tests/fixtures.rs` and normalized with `jeb::build_decision_value`), or expand the matrix with live calls.
+
+#### Option A: Offline Matrix via `jq` (`req_ping` across cached models)
+```bash
+jq -r '
+  [
+    .model,
+    (if .answers.proceed.noul >= 0.5 then "yes" else "no" end),
+    (.answers.proceed.noul | tostring),
+    (.usage.input_tokens | tostring)
+  ] | @tsv
+' fixtures/typesafe/resp_ping.json \
+  fixtures/openrouter/oresp_openai.json \
+  fixtures/openrouter/oresp_microsoft.json \
+  fixtures/openrouter/oresp_cloudflare.json | column -t
+```
+
+#### Option B: Offline Scenario Matrix (`req_1` to `req_10` across TypeSafe and OpenRouter Jev variants)
+```bash
+python3 - <<'PY'
+import glob, json, os
+
+rows = [("scenario", "model", "choice", "noul", "score")]
+for req_path in sorted(glob.glob("fixtures/req_[0-9]*.json")):
+    stem = os.path.basename(req_path).removeprefix("req_")
+    for resp_path in (f"fixtures/typesafe/resp_{stem}", f"fixtures/openrouter/oresp_{stem}"):
+        with open(resp_path) as f:
+            resp = json.load(f)
+        choice = noul = score = "-"
+        for k, ans in resp["answers"].items():
+            if ans["type"] == "choice":
+                choice = f"{k}={ans['choice']} ({ans['confidence']:.2f})"
+            elif ans["type"] == "noul":
+                decision = "yes" if ans["noul"] >= 0.5 else "no"
+                noul = f"{k}={decision} ({ans['noul']:.2f})"
+            elif ans["type"] == "score":
+                label = resp["answers"][k]["legend"].get(str(round(ans["score"])), str(ans["score"]))
+                score = f"{k}={label} ({ans['score']:.2f})"
+        rows.append((stem.removesuffix(".json"), resp["model"], choice, noul, score))
+
+widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+for r in rows:
+    print("  ".join(val.ljust(widths[i]) for i, val in enumerate(r)))
+PY
+```
+
+#### Option C: Live Expansion Across Models (`jeb` CLI and `scripts/fetch_fixture.sh`)
+```bash
+# Run a live decision summary against any OpenRouter decision model
+for model in \
+  typesafe/jev-1.13-20260917 \
+  openai/gpt-6-luna-decisions-20261006 \
+  microsoft/microsoft-decision-1-20261009 \
+  cloudflare/clef; do
+  jeb --provider openrouter --model "$model" --file fixtures/req_ping.json -d
+done
+
+# Record a new versioned response fixture for offline tests and evaluation matrices
+scripts/fetch_fixture.sh \
+  fixtures/req_1_devops.json \
+  fixtures/openrouter/oresp_1_devops_openai.json \
+  --provider openrouter \
+  --model openai/gpt-6-luna-decisions-20261006
+```
+

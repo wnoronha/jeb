@@ -1,6 +1,6 @@
 [package]
 name = "jeb"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "CLI tool to make quick decisions with TypeSafe AI's System One API"
 readme = "README.md"
