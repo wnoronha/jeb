@@ -3,7 +3,9 @@
   "blocked_by": [
     "jeb-mj6.1"
   ],
-  "blocks": [],
+  "blocks": [
+    "jeb-mj6.3"
+  ],
   "created": "2026-10-21T01:39:06Z",
   "description": "Move assert_live_fixture, assert_noul_fixture, and all 24 fixture test cases (DevOps, Billing, Security, DataEng, Refund, Flags, Oncall, ArduPilot Battery/EKF/Vibe, and Ping across TypeSafe and OpenRouter) out of src/main.rs into a dedicated integration test target at tests/fixtures.rs.\n\nAcceptance Criteria:\n1. tests/fixtures.rs exists and imports types, build_decision_value, and validate_request from the jeb library crate.\n2. All 24 live fixture tests execute under cargo test --test fixtures and validate both request schema and response summary output.\n3. No fixture test functions or include_str!(\"../fixtures/...\") calls remain in src/main.rs.\n4. Repetitive 3-question and noul fixture assertions are cleanly structured (table-driven or concise helper macro) without losing individual test granularity.\n\nagent: gemini-4-argon (antigravity)",
   "id": "jeb-mj6.2",
