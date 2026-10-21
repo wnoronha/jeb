@@ -383,18 +383,52 @@ fn validate_request(req: &SystemOneRequest) -> Result<()> {
         bail!("Payload must contain at least one question");
     }
     for (id, question) in &req.questions {
-        match question {
-            Question::Choice { criteria, .. } if criteria.is_empty() => {
-                bail!(
-                    "Choice question '{}' requires at least one criteria entry",
-                    id
-                );
+        let instructions = match question {
+            Question::Choice { instructions, .. }
+            | Question::Noul { instructions, .. }
+            | Question::Score { instructions, .. } => instructions,
+        };
+        match instructions {
+            serde_json::Value::Null => {
+                bail!("Question '{}' instructions must not be null", id);
             }
-            Question::Score { criteria, .. } if criteria.len() < 2 => {
-                bail!(
-                    "Score question '{}' requires at least 2 criteria levels",
-                    id
-                );
+            serde_json::Value::String(text) if text.trim().is_empty() => {
+                bail!("Question '{}' instructions must not be blank", id);
+            }
+            _ => {}
+        }
+        match question {
+            Question::Choice { criteria, .. } => {
+                if criteria.is_empty() {
+                    bail!(
+                        "Choice question '{}' requires at least one criteria entry",
+                        id
+                    );
+                }
+                for key in criteria.keys() {
+                    if key.trim().is_empty() {
+                        bail!("Choice question '{}' has a blank option key", id);
+                    }
+                }
+            }
+            Question::Score { criteria, .. } => {
+                if criteria.len() < 2 {
+                    bail!(
+                        "Score question '{}' requires at least 2 criteria levels",
+                        id
+                    );
+                }
+                for level in criteria {
+                    match level {
+                        serde_json::Value::Null => {
+                            bail!("Score question '{}' has a null level", id);
+                        }
+                        serde_json::Value::String(text) if text.trim().is_empty() => {
+                            bail!("Score question '{}' has a blank level", id);
+                        }
+                        _ => {}
+                    }
+                }
             }
             _ => {}
         }
@@ -673,6 +707,62 @@ mod tests {
         let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
         assert_eq!(resp.model, "jev-1.13.0");
         assert_eq!(resp.answers.len(), 2);
+    }
+
+    #[test]
+    fn test_validate_request_rejects_blank_instructions() {
+        let mut questions = BTreeMap::new();
+        questions.insert(
+            "q".to_string(),
+            Question::Noul {
+                instructions: serde_json::json!("   "),
+                criteria: None,
+            },
+        );
+        let req = SystemOneRequest {
+            model: "jev-latest".to_string(),
+            state: serde_json::json!("x"),
+            questions,
+        };
+        assert!(validate_request(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_request_rejects_blank_choice_key() {
+        let mut criteria = BTreeMap::new();
+        criteria.insert("  ".to_string(), serde_json::json!("desc"));
+        let mut questions = BTreeMap::new();
+        questions.insert(
+            "c".to_string(),
+            Question::Choice {
+                instructions: serde_json::json!("Pick"),
+                criteria,
+            },
+        );
+        let req = SystemOneRequest {
+            model: "jev-latest".to_string(),
+            state: serde_json::json!("x"),
+            questions,
+        };
+        assert!(validate_request(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_request_rejects_blank_score_level() {
+        let mut questions = BTreeMap::new();
+        questions.insert(
+            "s".to_string(),
+            Question::Score {
+                instructions: serde_json::json!("Rate"),
+                criteria: vec![serde_json::json!("Low"), serde_json::json!("  ")],
+            },
+        );
+        let req = SystemOneRequest {
+            model: "jev-latest".to_string(),
+            state: serde_json::json!("x"),
+            questions,
+        };
+        assert!(validate_request(&req).is_err());
     }
 
     #[test]
