@@ -1,0 +1,40 @@
+{
+  "model": "typesafe/jev-1.13-20260917",
+  "answers": {
+    "clipping_critical": {
+      "type": "noul",
+      "noul": 0.71
+    },
+    "hardware_severity": {
+      "type": "score",
+      "score": 2.4,
+      "legend": {
+        "0": "Normal",
+        "1": "Elevated",
+        "2": "Degraded",
+        "3": "Hazardous"
+      },
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.05,
+        "2": 0.5,
+        "3": 0.45
+      },
+      "confidence": 0.5
+    },
+    "motor_action": {
+      "type": "choice",
+      "choice": "reduce_throttle_rtl",
+      "probabilities": {
+        "continue_survey": 0.01,
+        "emergency_land": 0.09,
+        "reduce_throttle_rtl": 0.9
+      },
+      "confidence": 0.85
+    }
+  },
+  "usage": {
+    "input_tokens": 539,
+    "output_tokens": 91
+  }
+}

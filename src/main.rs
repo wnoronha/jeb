@@ -1506,4 +1506,76 @@ mod tests {
             "typesafe/jev-1.13-20260917",
         );
     }
+
+    #[test]
+    fn test_typesafe_fixture_ardupilot_battery() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_8_ardupilot_battery.json"),
+            include_str!("../fixtures/typesafe/resp_8_ardupilot_battery.json"),
+            "flight_action",
+            "abort_mission",
+            "airframe_risk",
+            "jev-1.13.0",
+        );
+    }
+
+    #[test]
+    fn test_typesafe_fixture_ardupilot_ekf() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_9_ardupilot_ekf.json"),
+            include_str!("../fixtures/typesafe/resp_9_ardupilot_ekf.json"),
+            "ekf_action",
+            "mag_compromised",
+            "flyaway_risk",
+            "jev-1.13.0",
+        );
+    }
+
+    #[test]
+    fn test_typesafe_fixture_ardupilot_vibe() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_10_ardupilot_vibe.json"),
+            include_str!("../fixtures/typesafe/resp_10_ardupilot_vibe.json"),
+            "motor_action",
+            "clipping_critical",
+            "hardware_severity",
+            "jev-1.13.0",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_ardupilot_battery() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_8_ardupilot_battery.json"),
+            include_str!("../fixtures/openrouter/oresp_8_ardupilot_battery.json"),
+            "flight_action",
+            "abort_mission",
+            "airframe_risk",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_ardupilot_ekf() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_9_ardupilot_ekf.json"),
+            include_str!("../fixtures/openrouter/oresp_9_ardupilot_ekf.json"),
+            "ekf_action",
+            "mag_compromised",
+            "flyaway_risk",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_ardupilot_vibe() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_10_ardupilot_vibe.json"),
+            include_str!("../fixtures/openrouter/oresp_10_ardupilot_vibe.json"),
+            "motor_action",
+            "clipping_critical",
+            "hardware_severity",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
 }

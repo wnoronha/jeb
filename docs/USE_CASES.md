@@ -170,3 +170,64 @@ jeb \
   --noul "policy_violation:Does this invoice violate variance threshold policy (>50% variance without PO)?" \
   -d
 ```
+
+---
+
+## 5. Robotics & Autonomous Systems (ArduPilot Flight Telemetry)
+
+Evaluate real-time MAVLink (`SYS_STATUS`, `GLOBAL_POSITION_INT`, `VIBRATION`, `STATUSTEXT`) or ArduPilot DataFlash (`XKF4`, `GPS`, `RCOU`) telemetry on companion computers for autonomous failsafe and mode transitions.
+
+#### Option A: Raw JSON (Battery Failsafe in Headwind)
+```bash
+echo '{
+  "state": "ArduPilot telemetry: SYS_STATUS mode=GUIDED armed=true vbat=13.82V curr=29.4A rem=18%; GLOBAL_POSITION_INT alt_rel=42.8m dist_home=680m headwind=7.2m/s; STATUSTEXT SEVERITY_CRITICAL: Battery 1 low voltage failsafe triggered (13.82V < 14.00V).",
+  "questions": {
+    "flight_action": {
+      "type": "choice",
+      "instructions": "Select the immediate flight mode transition for the companion computer.",
+      "criteria": {
+        "continue_mission": "Remain in GUIDED mode and proceed to next waypoint",
+        "rtl": "Switch to RTL (Return-to-Launch) at current altitude",
+        "land_now": "Switch to LAND immediately at current GPS coordinates"
+      }
+    },
+    "abort_mission": {
+      "type": "noul",
+      "instructions": "Should the autonomous mission be aborted immediately?"
+    },
+    "airframe_risk": {
+      "type": "score",
+      "instructions": "Rate the risk of airframe loss if flight continues to the next waypoint.",
+      "criteria": ["Low", "Moderate", "High", "Critical"]
+    }
+  }
+}' | jeb -d
+```
+
+#### Option B: CLI Flags (EKF3 Lane Switch & Magnetometer Anomaly)
+```bash
+jeb \
+  --state "ArduPilot DataFlash: XKF4 vel_var=0.84 pos_horiz_var=0.92 compass_var=1.18; GPS status=3 num_sats=6 hdop=2.85; MSG: EKF3 IMU0 MAG0 ground mag anomaly, lane switch 0->1 while hovering 15m from steel structure." \
+  --choice "ekf_action:Select the safest navigation recovery action after the EKF lane switch." \
+  --option "hold_loiter=Switch to LOITER and wait for EKF variance to settle" \
+  --option "land_alt_hold=Switch to ALT_HOLD or LAND using barometric altitude" \
+  --option "switch_rtl=Trigger RTL using backup EKF lane" \
+  --noul "mag_compromised:Is the primary magnetometer heading unreliable for autonomous waypoint navigation?" \
+  --score "flyaway_risk:Rate the risk of flyaway or position divergence." \
+  --level "Negligible,Moderate,Severe,Extreme" \
+  -d
+```
+
+#### Option C: CLI Flags (IMU Vibration Clipping & Motor Saturation)
+```bash
+jeb \
+  --state "ArduPilot telemetry: VIBRATION vibe_x=44.2m/s2 vibe_y=48.9m/s2 vibe_z=74.6m/s2 clipping_0=312 clipping_1=245; RCOU C1=1890 C2=1510 C3=1910 C4=1495; STATUSTEXT SEVERITY_WARNING: High vibration and motor 1/3 saturation detected in AUTO survey." \
+  --choice "motor_action:Select the immediate flight response to the vibration and motor output imbalance." \
+  --option "continue_survey=Continue AUTO survey grid at current speed" \
+  --option "reduce_throttle_rtl=Reduce max velocity to 4m/s and command RTL" \
+  --option "emergency_land=Execute immediate vertical descent in LAND mode" \
+  --noul "clipping_critical:Does accelerometer clipping exceed safe attitude control margins?" \
+  --score "hardware_severity:Rate the severity of the propulsion and IMU vibration anomaly." \
+  --level "Normal,Elevated,Degraded,Hazardous" \
+  -d
+```
