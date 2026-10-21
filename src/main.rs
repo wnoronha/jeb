@@ -93,6 +93,8 @@ struct Cli {
 }
 
 fn main() -> Result<()> {
+    dotenvy::dotenv().ok();
+
     let cli = Cli::parse();
 
     let request = parse_request(&cli)?;

@@ -31,6 +31,9 @@ Set your API key via environment variable:
 export TYPESAFE_API_KEY="your-api-key"
 ```
 
+You can also place it in a `.env` file in the working directory.
+`jeb` loads `.env` at startup. Explicit environment variables take precedence.
+
 Optional settings:
 ```bash
 export TYPESAFE_MODEL="jev-latest"               # default: jev-latest
