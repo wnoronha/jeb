@@ -1,0 +1,15 @@
+{
+  "assignee": "",
+  "blocked_by": [],
+  "blocks": [],
+  "created": "2026-10-21T01:39:06Z",
+  "description": "Verify src/main.rs only retains Cli struct, main(), CLI flag parsing/resolution helpers (parse_request, resolve_setting, resolve_api_key, resolve_model, split_id_and_instructions), and CLI-specific unit tests. Run full verification and sync.\n\nAcceptance Criteria:\n1. src/main.rs is under 650 lines and contains only CLI argument parsing, entrypoint flow, and CLI flag unit tests.\n2. Total test count across lib, bin, and integration targets is \u003e= 70 tests with 0 failures.\n3. cargo clippy --all-targets -- -D warnings and cargo fmt --check pass cleanly.\n\nagent: gemini-4-argon (antigravity)",
+  "id": "jeb-mj6.3",
+  "labels": [],
+  "parent": "jeb-mj6",
+  "priority": 2,
+  "status": "open",
+  "title": "Slim src/main.rs to CLI entrypoint and verify workspace test suite",
+  "type": "task",
+  "updated_at": "2026-10-21T01:39:06Z"
+}
