@@ -26,7 +26,7 @@ impl Provider {
     pub fn default_model(self) -> &'static str {
         match self {
             Provider::Typesafe => "jev-latest",
-            Provider::Openrouter => "typesafe/jev-1.13-20260917",
+            Provider::Openrouter => "typesafe/jev-1.13",
         }
     }
 

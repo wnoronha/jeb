@@ -9,7 +9,7 @@
 | Flag | Env Var | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `-k`, `--api-key` | `TYPESAFE_API_KEY` / `OPENROUTER_API_KEY` | *(Required)* | Provider API key |
-| `-m`, `--model` | `TYPESAFE_MODEL` / `OPENROUTER_MODEL` | `jev-latest` / `typesafe/jev-1.13-20260917` | Evaluation model |
+| `-m`, `--model` | `TYPESAFE_MODEL` / `OPENROUTER_MODEL` | `jev-latest` / `typesafe/jev-1.13` | Evaluation model |
 | `--base-url` | `TYPESAFE_BASE_URL` / `OPENROUTER_BASE_URL` | per-provider default | API endpoint base URL |
 | `--timeout` | — | `30` | Request timeout (seconds) |
 | `-p`, `--pretty` | — | `false` | Pretty-print JSON output |

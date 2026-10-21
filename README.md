@@ -41,7 +41,7 @@ You can also place it in a `.env` file in the working directory.
 | Provider | Endpoint | Key env | Model env | Default model |
 | :--- | :--- | :--- | :--- | :--- |
 | `typesafe` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | `TYPESAFE_MODEL` | `jev-latest` |
-| `openrouter` | `https://openrouter.ai` | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `typesafe/jev-1.13-20260917` |
+| `openrouter` | `https://openrouter.ai` | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `typesafe/jev-1.13` |
 
 ```bash
 jeb --provider openrouter --list-models
