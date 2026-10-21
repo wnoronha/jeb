@@ -201,6 +201,10 @@ fn resolve_model(explicit: Option<String>, provider: Provider) -> (String, bool)
 fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
     let (model, model_explicit) = resolve_model(cli.model.clone(), provider);
 
+    if cli.file.is_some() && cli.input.is_some() {
+        bail!("--file cannot be combined with positional JSON input");
+    }
+
     let has_question_flag = cli.choice.is_some() || cli.noul.is_some() || cli.score.is_some();
     if cli.state.is_none() {
         if has_question_flag {
@@ -790,6 +794,31 @@ mod tests {
             choice: Some("task:Do this".to_string()),
             options: vec!["a=First".to_string()],
             noul: Some("task:Is it done?".to_string()),
+            noul_true: None,
+            noul_false: None,
+            score: None,
+            levels: vec![],
+            provider: Provider::Typesafe,
+            list_models: false,
+        };
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
+    }
+
+    #[test]
+    fn test_quick_rejects_file_with_input() {
+        let cli = Cli {
+            input: Some("{\"state\": \"x\"}".to_string()),
+            file: Some(std::path::PathBuf::from("req.json")),
+            model: None,
+            api_key: None,
+            base_url: None,
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: None,
+            choice: None,
+            options: vec![],
+            noul: None,
             noul_true: None,
             noul_false: None,
             score: None,
