@@ -200,6 +200,35 @@ fn resolve_model(explicit: Option<String>, provider: Provider) -> (String, bool)
 /// Parses CLI inputs into a validated `SystemOneRequest`.
 fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
     let (model, model_explicit) = resolve_model(cli.model.clone(), provider);
+
+    let has_question_flag = cli.choice.is_some() || cli.noul.is_some() || cli.score.is_some();
+    if cli.state.is_none() {
+        if has_question_flag {
+            bail!("Question flags (--choice, --noul, --score) require --state");
+        }
+        if !cli.options.is_empty() {
+            bail!("--option requires --choice");
+        }
+        if !cli.levels.is_empty() {
+            bail!("--level requires --score");
+        }
+        if cli.noul_true.is_some() || cli.noul_false.is_some() {
+            bail!("--noul-true and --noul-false require --noul");
+        }
+    } else {
+        if cli.choice.is_none() && !cli.options.is_empty() {
+            bail!("--option requires --choice");
+        }
+        if cli.score.is_none() && !cli.levels.is_empty() {
+            bail!("--level requires --score");
+        }
+        if cli.noul.is_none() && (cli.noul_true.is_some() || cli.noul_false.is_some()) {
+            bail!("--noul-true and --noul-false require --noul");
+        }
+        if cli.file.is_some() || cli.input.is_some() {
+            bail!("--state cannot be combined with --file or JSON input");
+        }
+    }
     // 1. If quick CLI flags are provided, construct request from flags
     if let Some(state_raw) = &cli.state {
         let state_val = serde_json::from_str::<serde_json::Value>(state_raw)
@@ -664,6 +693,131 @@ mod tests {
             choice: Some("task:Do this".to_string()),
             options: vec!["a=First".to_string()],
             noul: Some("task:Is it done?".to_string()),
+            noul_true: None,
+            noul_false: None,
+            score: None,
+            levels: vec![],
+            provider: Provider::Typesafe,
+            list_models: false,
+        };
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
+    }
+
+    #[test]
+    fn test_quick_rejects_question_flag_without_state() {
+        let cli = Cli {
+            input: None,
+            file: None,
+            model: None,
+            api_key: None,
+            base_url: None,
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: None,
+            choice: Some("task:Do this".to_string()),
+            options: vec!["a=First".to_string()],
+            noul: None,
+            noul_true: None,
+            noul_false: None,
+            score: None,
+            levels: vec![],
+            provider: Provider::Typesafe,
+            list_models: false,
+        };
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
+    }
+
+    #[test]
+    fn test_quick_rejects_dangling_option() {
+        let cli = Cli {
+            input: None,
+            file: None,
+            model: None,
+            api_key: None,
+            base_url: None,
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: Some("state".to_string()),
+            choice: None,
+            options: vec!["a=First".to_string()],
+            noul: Some("safe:Is it safe?".to_string()),
+            noul_true: None,
+            noul_false: None,
+            score: None,
+            levels: vec![],
+            provider: Provider::Typesafe,
+            list_models: false,
+        };
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
+    }
+
+    #[test]
+    fn test_quick_rejects_dangling_level() {
+        let cli = Cli {
+            input: None,
+            file: None,
+            model: None,
+            api_key: None,
+            base_url: None,
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: Some("state".to_string()),
+            choice: Some("task:Do this".to_string()),
+            options: vec!["a=First".to_string()],
+            noul: None,
+            noul_true: None,
+            noul_false: None,
+            score: None,
+            levels: vec!["High".to_string()],
+            provider: Provider::Typesafe,
+            list_models: false,
+        };
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
+    }
+
+    #[test]
+    fn test_quick_rejects_dangling_noul_labels() {
+        let cli = Cli {
+            input: None,
+            file: None,
+            model: None,
+            api_key: None,
+            base_url: None,
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: Some("state".to_string()),
+            choice: None,
+            options: vec![],
+            noul: None,
+            noul_true: Some("Yes".to_string()),
+            noul_false: None,
+            score: Some("risk:Rate it".to_string()),
+            levels: vec!["Low".to_string(), "High".to_string()],
+            provider: Provider::Typesafe,
+            list_models: false,
+        };
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
+    }
+
+    #[test]
+    fn test_quick_rejects_state_with_file() {
+        let cli = Cli {
+            input: None,
+            file: Some(std::path::PathBuf::from("req.json")),
+            model: None,
+            api_key: None,
+            base_url: None,
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: Some("state".to_string()),
+            choice: Some("task:Do this".to_string()),
+            options: vec!["a=First".to_string()],
+            noul: None,
             noul_true: None,
             noul_false: None,
             score: None,
