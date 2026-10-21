@@ -1,7 +1,9 @@
 {
   "assignee": "",
   "blocked_by": [],
-  "blocks": [],
+  "blocks": [
+    "jeb-mj6.2"
+  ],
   "created": "2026-10-21T01:39:06Z",
   "description": "Create src/lib.rs to expose pub mod client and pub mod types, and move non-CLI core logic out of src/main.rs (including NOUL_YES_THRESHOLD, validate_request, parse_json_payload, score_decision_label, build_decision_value, and print_decision_summary) along with their unit tests. Update src/main.rs to import these symbols from jeb.\n\nAcceptance Criteria:\n1. src/lib.rs compiles and exports client, types, validate_request, parse_json_payload, score_decision_label, build_decision_value, and print_decision_summary.\n2. Unit tests for payload parsing, request validation, and score/decision summary formatting move to src/lib.rs and pass.\n3. src/main.rs imports shared logic from the jeb library crate without duplicate module declarations (mod client / mod types).\n4. cargo test and cargo clippy --all-targets -- -D warnings pass.\n\nagent: gemini-4-argon (antigravity)",
   "id": "jeb-mj6.1",
@@ -11,5 +13,5 @@
   "status": "open",
   "title": "Extract core modules, validation, and decision formatting to src/lib.rs",
   "type": "task",
-  "updated_at": "2026-10-21T01:39:06Z"
+  "updated_at": "2026-10-21T01:39:16Z"
 }
