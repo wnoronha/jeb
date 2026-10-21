@@ -773,7 +773,7 @@ mod tests {
     fn test_live_fixture_devops() {
         assert_live_fixture(
             include_str!("../fixtures/req_1_devops.json"),
-            include_str!("../fixtures/resp_1_devops.json"),
+            include_str!("../fixtures/typesafe/resp_1_devops.json"),
             "triage_action",
             "critical_sev",
             "risk",
@@ -785,7 +785,7 @@ mod tests {
     fn test_live_fixture_billing() {
         assert_live_fixture(
             include_str!("../fixtures/req_2_billing.json"),
-            include_str!("../fixtures/resp_2_billing.json"),
+            include_str!("../fixtures/typesafe/resp_2_billing.json"),
             "approval_route",
             "policy_violation",
             "review_priority",
@@ -797,7 +797,7 @@ mod tests {
     fn test_live_fixture_security() {
         assert_live_fixture(
             include_str!("../fixtures/req_3_security.json"),
-            include_str!("../fixtures/resp_3_security.json"),
+            include_str!("../fixtures/typesafe/resp_3_security.json"),
             "exploitability",
             "needs_hotfix",
             "severity",
@@ -808,7 +808,7 @@ mod tests {
     #[test]
     fn test_openrouter_fixture_devops() {
         assert_live_fixture(
-            include_str!("../fixtures/openrouter/oreq_1_devops.json"),
+            include_str!("../fixtures/req_1_devops.json"),
             include_str!("../fixtures/openrouter/oresp_1_devops.json"),
             "triage_action",
             "critical_sev",
@@ -820,7 +820,7 @@ mod tests {
     #[test]
     fn test_openrouter_fixture_billing() {
         assert_live_fixture(
-            include_str!("../fixtures/openrouter/oreq_2_billing.json"),
+            include_str!("../fixtures/req_2_billing.json"),
             include_str!("../fixtures/openrouter/oresp_2_billing.json"),
             "approval_route",
             "policy_violation",
@@ -832,7 +832,7 @@ mod tests {
     #[test]
     fn test_openrouter_fixture_security() {
         assert_live_fixture(
-            include_str!("../fixtures/openrouter/oreq_3_security.json"),
+            include_str!("../fixtures/req_3_security.json"),
             include_str!("../fixtures/openrouter/oresp_3_security.json"),
             "exploitability",
             "needs_hotfix",
@@ -861,7 +861,7 @@ mod tests {
     #[test]
     fn test_openrouter_fixture_openai() {
         assert_noul_fixture(
-            include_str!("../fixtures/openrouter/oreq_ping.json"),
+            include_str!("../fixtures/req_ping.json"),
             include_str!("../fixtures/openrouter/oresp_openai.json"),
             "proceed",
             "openai/gpt-6-luna-decisions-20261006",
@@ -871,7 +871,7 @@ mod tests {
     #[test]
     fn test_openrouter_fixture_microsoft() {
         assert_noul_fixture(
-            include_str!("../fixtures/openrouter/oreq_ping.json"),
+            include_str!("../fixtures/req_ping.json"),
             include_str!("../fixtures/openrouter/oresp_microsoft.json"),
             "proceed",
             "microsoft/microsoft-decision-1-20261009",
@@ -881,10 +881,20 @@ mod tests {
     #[test]
     fn test_openrouter_fixture_cloudflare() {
         assert_noul_fixture(
-            include_str!("../fixtures/openrouter/oreq_ping.json"),
+            include_str!("../fixtures/req_ping.json"),
             include_str!("../fixtures/openrouter/oresp_cloudflare.json"),
             "proceed",
             "cloudflare/clef",
+        );
+    }
+
+    #[test]
+    fn test_typesafe_fixture_ping() {
+        assert_noul_fixture(
+            include_str!("../fixtures/req_ping.json"),
+            include_str!("../fixtures/typesafe/resp_ping.json"),
+            "proceed",
+            "jev-1.13.0",
         );
     }
 }
