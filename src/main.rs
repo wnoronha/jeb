@@ -529,7 +529,7 @@ fn print_decision_summary(response: &SystemOneResponse, pretty: bool) -> Result<
 }
 
 /// Resolves a score to its legend label, preferring the rounded value
-/// and falling back to the nearest numeric key.
+/// and falling back to the entry nearest the raw score.
 fn score_decision_label(legend: &BTreeMap<String, String>, score: f64) -> String {
     let target = score.round() as i64;
     if let Some(label) = legend.get(&target.to_string()) {
@@ -537,8 +537,8 @@ fn score_decision_label(legend: &BTreeMap<String, String>, score: f64) -> String
     }
     legend
         .iter()
-        .filter_map(|(key, label)| key.parse::<i64>().ok().map(|n| (n, label)))
-        .min_by_key(|(n, _)| (n - target).abs())
+        .filter_map(|(key, label)| key.parse::<i64>().ok().map(|n| (n as f64, label)))
+        .min_by(|(a, _), (b, _)| (a - score).abs().total_cmp(&(b - score).abs()))
         .map(|(_, label)| label.clone())
         .unwrap_or_else(|| score.to_string())
 }
@@ -1186,6 +1186,18 @@ mod tests {
         assert_eq!(score_decision_label(&legend, 1.6), "High");
         assert_eq!(score_decision_label(&legend, 5.0), "High");
         assert_eq!(score_decision_label(&BTreeMap::new(), 1.0), "1".to_string());
+    }
+
+    #[test]
+    fn test_score_decision_label_breaks_sparse_ties() {
+        let legend: BTreeMap<String, String> = [
+            ("0".to_string(), "Low".to_string()),
+            ("2".to_string(), "High".to_string()),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(score_decision_label(&legend, 0.6), "Low");
+        assert_eq!(score_decision_label(&legend, 1.6), "High");
     }
 
     #[test]
