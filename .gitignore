@@ -29,3 +29,6 @@ Thumbs.db
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Beads / Dolt files (added by bd init)
+*.gate.lock*
