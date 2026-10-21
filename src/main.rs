@@ -5,11 +5,11 @@ mod types;
 
 use anyhow::{bail, Context, Result};
 use clap::{ArgAction, Parser};
-use client::TypeSafeClient;
+use client::{fetch_openrouter_models, DecisionsClient};
 use std::collections::BTreeMap;
 use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
-use types::{Answer, NoulCriteria, Question, SystemOneRequest, SystemOneResponse};
+use types::{Answer, NoulCriteria, Provider, Question, SystemOneRequest, SystemOneResponse};
 
 /// Probability at or above which a noul answer maps to yes.
 const NOUL_YES_THRESHOLD: f64 = 0.5;
@@ -30,21 +30,24 @@ struct Cli {
     #[arg(short, long, value_name = "FILE")]
     file: Option<PathBuf>,
 
-    /// Model to use for evaluation
-    #[arg(short, long, env = "TYPESAFE_MODEL", default_value = "jev-latest")]
-    model: String,
+    /// Decision API provider
+    #[arg(long, value_enum, env = "JEB_PROVIDER", default_value_t = Provider::Typesafe)]
+    provider: Provider,
 
-    /// TypeSafe API key
-    #[arg(short = 'k', long, env = "TYPESAFE_API_KEY")]
+    /// Model to use for evaluation.
+    /// Env: TYPESAFE_MODEL with --provider typesafe, OPENROUTER_MODEL with --provider openrouter.
+    #[arg(short, long)]
+    model: Option<String>,
+
+    /// API key for the selected provider.
+    /// Env: TYPESAFE_API_KEY with --provider typesafe, OPENROUTER_API_KEY with --provider openrouter.
+    #[arg(short = 'k', long)]
     api_key: Option<String>,
 
-    /// TypeSafe API Base URL
-    #[arg(
-        long,
-        env = "TYPESAFE_BASE_URL",
-        default_value = "https://api.typesafe.ai"
-    )]
-    base_url: String,
+    /// API base URL.
+    /// Env: TYPESAFE_BASE_URL with --provider typesafe, OPENROUTER_BASE_URL with --provider openrouter.
+    #[arg(long)]
+    base_url: Option<String>,
 
     /// Request timeout in seconds
     #[arg(long, default_value = "30")]
@@ -90,25 +93,53 @@ struct Cli {
     /// Level descriptions for score question (repeatable or comma-separated)
     #[arg(long = "level", action = ArgAction::Append)]
     levels: Vec<String>,
+
+    /// List available decision models and exit
+    #[arg(long, default_value_t = false)]
+    list_models: bool,
 }
 
 fn main() -> Result<()> {
     dotenvy::dotenv().ok();
 
     let cli = Cli::parse();
+    let provider = cli.provider;
 
-    let request = parse_request(&cli)?;
+    if cli.list_models {
+        if provider != Provider::Openrouter {
+            bail!("Model listing is only supported with --provider openrouter.");
+        }
+        let base_url = resolve_setting(
+            cli.base_url.clone(),
+            provider.base_url_env(),
+            provider.default_base_url(),
+        );
+        let api_key = resolve_api_key(cli.api_key.clone(), provider.api_key_env());
+        let models = fetch_openrouter_models(&base_url, api_key.as_deref(), cli.timeout)?;
+        if cli.pretty {
+            println!("{}", serde_json::to_string_pretty(&models)?);
+        } else {
+            println!("{}", serde_json::to_string(&models)?);
+        }
+        return Ok(());
+    }
 
-    let api_key = cli
-        .api_key
-        .filter(|k| !k.trim().is_empty())
-        .ok_or_else(|| {
+    let request = parse_request(&cli, provider)?;
+
+    let api_key =
+        resolve_api_key(cli.api_key.clone(), provider.api_key_env()).ok_or_else(|| {
             anyhow::anyhow!(
-                "Missing TypeSafe API key. Set TYPESAFE_API_KEY environment variable or pass --api-key."
+                "Missing API key. Set {} environment variable or pass --api-key.",
+                provider.api_key_env()
             )
         })?;
 
-    let client = TypeSafeClient::new(api_key, Some(cli.base_url), cli.timeout)?;
+    let base_url = resolve_setting(
+        cli.base_url.clone(),
+        provider.base_url_env(),
+        provider.default_base_url(),
+    );
+    let client = DecisionsClient::new(api_key, Some(base_url), cli.timeout, provider)?;
     let response = client.evaluate(&request)?;
 
     if cli.decision_only {
@@ -122,8 +153,41 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Resolves a setting from the explicit flag value, then the provider
+/// env fallback, then the provider default. Blank values count as unset.
+fn resolve_setting(explicit: Option<String>, fallback_env: &str, default: &str) -> String {
+    if let Some(value) = explicit {
+        if !value.trim().is_empty() {
+            return value;
+        }
+    }
+    if let Ok(value) = std::env::var(fallback_env) {
+        if !value.trim().is_empty() {
+            return value;
+        }
+    }
+    default.to_string()
+}
+
+/// Resolves an API key from the explicit flag value or the provider env fallback.
+fn resolve_api_key(explicit: Option<String>, fallback_env: &str) -> Option<String> {
+    if let Some(value) = explicit {
+        if !value.trim().is_empty() {
+            return Some(value);
+        }
+    }
+    std::env::var(fallback_env)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+}
+
 /// Parses CLI inputs into a validated `SystemOneRequest`.
-fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
+fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
+    let model = resolve_setting(
+        cli.model.clone(),
+        provider.model_env(),
+        provider.default_model(),
+    );
     // 1. If quick CLI flags are provided, construct request from flags
     if let Some(state_raw) = &cli.state {
         let state_val = serde_json::from_str::<serde_json::Value>(state_raw)
@@ -217,7 +281,7 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
         }
 
         return Ok(SystemOneRequest {
-            model: cli.model.clone(),
+            model,
             state: state_val,
             questions,
         });
@@ -227,7 +291,7 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
     if let Some(path) = &cli.file {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read JSON file from {}", path.display()))?;
-        return parse_json_payload(&content, &cli.model);
+        return parse_json_payload(&content, &model);
     }
 
     // 3. If input arg is passed
@@ -237,9 +301,9 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
             io::stdin()
                 .read_to_string(&mut buffer)
                 .context("Failed to read from stdin")?;
-            return parse_json_payload(&buffer, &cli.model);
+            return parse_json_payload(&buffer, &model);
         } else {
-            return parse_json_payload(input, &cli.model);
+            return parse_json_payload(input, &model);
         }
     }
 
@@ -250,7 +314,7 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
             .read_to_string(&mut buffer)
             .context("Failed to read from stdin")?;
         if !buffer.trim().is_empty() {
-            return parse_json_payload(&buffer, &cli.model);
+            return parse_json_payload(&buffer, &model);
         }
     }
 
@@ -438,9 +502,9 @@ mod tests {
         let cli = Cli {
             input: None,
             file: None,
-            model: "jev-latest".to_string(),
+            model: Some("jev-latest".to_string()),
             api_key: Some("dummy-key".to_string()),
-            base_url: "https://api.typesafe.ai".to_string(),
+            base_url: Some("https://api.typesafe.ai".to_string()),
             timeout: 30,
             pretty: false,
             decision_only: false,
@@ -453,11 +517,13 @@ mod tests {
             noul: Some("is_clear:Is the request clear?".to_string()),
             noul_true: None,
             noul_false: None,
+            provider: Provider::Typesafe,
+            list_models: false,
             score: None,
             levels: vec![],
         };
 
-        let req = parse_request(&cli).unwrap();
+        let req = parse_request(&cli, Provider::Typesafe).unwrap();
         assert_eq!(req.questions.len(), 2);
         assert!(req.questions.contains_key("intent"));
         assert!(req.questions.contains_key("is_clear"));
@@ -503,13 +569,50 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_setting_prefers_explicit() {
+        assert_eq!(
+            resolve_setting(
+                Some("explicit".to_string()),
+                "JEB_TEST_UNSET_7XQ2",
+                "fallback-default"
+            ),
+            "explicit"
+        );
+    }
+
+    #[test]
+    fn test_resolve_setting_uses_default_when_unset() {
+        assert_eq!(
+            resolve_setting(None, "JEB_TEST_UNSET_7XQ2", "fallback-default"),
+            "fallback-default"
+        );
+        assert_eq!(
+            resolve_setting(
+                Some("  ".to_string()),
+                "JEB_TEST_UNSET_7XQ2",
+                "fallback-default"
+            ),
+            "fallback-default"
+        );
+    }
+
+    #[test]
+    fn test_resolve_api_key_none_when_unset() {
+        assert_eq!(resolve_api_key(None, "JEB_TEST_UNSET_7XQ2"), None);
+        assert_eq!(
+            resolve_api_key(Some("k".to_string()), "JEB_TEST_UNSET_7XQ2"),
+            Some("k".to_string())
+        );
+    }
+
+    #[test]
     fn test_quick_choice_rejects_empty_option_key() {
         let cli = Cli {
             input: None,
             file: None,
-            model: "jev-latest".to_string(),
+            model: Some("jev-latest".to_string()),
             api_key: None,
-            base_url: "https://api.typesafe.ai".to_string(),
+            base_url: Some("https://api.typesafe.ai".to_string()),
             timeout: 30,
             pretty: false,
             decision_only: false,
@@ -519,10 +622,12 @@ mod tests {
             noul: None,
             noul_true: None,
             noul_false: None,
+            provider: Provider::Typesafe,
+            list_models: false,
             score: None,
             levels: vec![],
         };
-        assert!(parse_request(&cli).is_err());
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
 
     #[test]
@@ -530,9 +635,9 @@ mod tests {
         let cli = Cli {
             input: None,
             file: None,
-            model: "jev-latest".to_string(),
+            model: Some("jev-latest".to_string()),
             api_key: None,
-            base_url: "https://api.typesafe.ai".to_string(),
+            base_url: Some("https://api.typesafe.ai".to_string()),
             timeout: 30,
             pretty: false,
             decision_only: false,
@@ -542,10 +647,12 @@ mod tests {
             noul: None,
             noul_true: None,
             noul_false: None,
+            provider: Provider::Typesafe,
+            list_models: false,
             score: None,
             levels: vec![],
         };
-        assert!(parse_request(&cli).is_err());
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
 
     #[test]
@@ -558,9 +665,9 @@ mod tests {
         let cli = Cli {
             input: None,
             file: None,
-            model: "jev-latest".to_string(),
+            model: Some("jev-latest".to_string()),
             api_key: None,
-            base_url: "https://api.typesafe.ai".to_string(),
+            base_url: Some("https://api.typesafe.ai".to_string()),
             timeout: 30,
             pretty: false,
             decision_only: false,
@@ -570,10 +677,12 @@ mod tests {
             noul: Some("safe:Is it safe?".to_string()),
             noul_true: Some("Safe to proceed".to_string()),
             noul_false: Some("Unsafe".to_string()),
+            provider: Provider::Typesafe,
+            list_models: false,
             score: None,
             levels: vec![],
         };
-        let req = parse_request(&cli).unwrap();
+        let req = parse_request(&cli, Provider::Typesafe).unwrap();
         match req.questions.get("safe").unwrap() {
             Question::Noul { criteria, .. } => {
                 assert!(criteria.is_some());
@@ -624,6 +733,7 @@ mod tests {
         choice_id: &str,
         noul_id: &str,
         score_id: &str,
+        expected_model: &str,
     ) {
         let req: SystemOneRequest = serde_json::from_str(req_json).unwrap();
         assert!(matches!(
@@ -640,7 +750,7 @@ mod tests {
         ));
 
         let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
-        assert_eq!(resp.model, "jev-1.13.0");
+        assert_eq!(resp.model, expected_model);
         assert!(matches!(
             resp.answers.get(choice_id).unwrap(),
             Answer::Choice { .. }
@@ -667,6 +777,7 @@ mod tests {
             "triage_action",
             "critical_sev",
             "risk",
+            "jev-1.13.0",
         );
     }
 
@@ -678,6 +789,7 @@ mod tests {
             "approval_route",
             "policy_violation",
             "review_priority",
+            "jev-1.13.0",
         );
     }
 
@@ -689,6 +801,43 @@ mod tests {
             "exploitability",
             "needs_hotfix",
             "severity",
+            "jev-1.13.0",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_devops() {
+        assert_live_fixture(
+            include_str!("../fixtures/openrouter/oreq_1_devops.json"),
+            include_str!("../fixtures/openrouter/oresp_1_devops.json"),
+            "triage_action",
+            "critical_sev",
+            "risk",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_billing() {
+        assert_live_fixture(
+            include_str!("../fixtures/openrouter/oreq_2_billing.json"),
+            include_str!("../fixtures/openrouter/oresp_2_billing.json"),
+            "approval_route",
+            "policy_violation",
+            "review_priority",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_security() {
+        assert_live_fixture(
+            include_str!("../fixtures/openrouter/oreq_3_security.json"),
+            include_str!("../fixtures/openrouter/oresp_3_security.json"),
+            "exploitability",
+            "needs_hotfix",
+            "severity",
+            "typesafe/jev-1.13-20260917",
         );
     }
 }

@@ -1,29 +1,44 @@
-//! HTTP client for communicating with the TypeSafe AI System One API.
+//! HTTP client for decision evaluation APIs (TypeSafe System One, OpenRouter Decisions).
 
-use crate::types::{ApiErrorResponse, SystemOneRequest, SystemOneResponse};
+use crate::types::{
+    parse_model_catalog, ApiErrorResponse, ModelInfo, OpenRouterModelsResponse, Provider,
+    SystemOneRequest, SystemOneResponse,
+};
 use anyhow::{bail, Context, Result};
 use reqwest::blocking::Client;
 use std::time::Duration;
 
-/// Client for dispatching System One evaluation requests.
-pub struct TypeSafeClient {
+/// Referer header sent with OpenRouter requests.
+const OPENROUTER_REFERER: &str = "https://github.com/typesafe-ai/jeb";
+
+/// Client for dispatching decision evaluation requests.
+pub struct DecisionsClient {
     api_key: String,
     base_url: String,
+    provider: Provider,
     client: Client,
 }
 
-impl TypeSafeClient {
-    /// Creates a new `TypeSafeClient` with API key, optional base URL, and timeout.
-    pub fn new(api_key: String, base_url: Option<String>, timeout_secs: u64) -> Result<Self> {
+impl DecisionsClient {
+    /// Creates a new `DecisionsClient` with API key, optional base URL, and timeout.
+    pub fn new(
+        api_key: String,
+        base_url: Option<String>,
+        timeout_secs: u64,
+        provider: Provider,
+    ) -> Result<Self> {
         if api_key.trim().is_empty() {
-            bail!("TypeSafe API key is required. Set TYPESAFE_API_KEY environment variable or pass --api-key.");
+            bail!(
+                "API key is required. Set {} environment variable or pass --api-key.",
+                provider.api_key_env()
+            );
         }
         if timeout_secs == 0 {
             bail!("Timeout must be greater than zero seconds.");
         }
 
         let base_url = base_url
-            .unwrap_or_else(|| "https://api.typesafe.ai".to_string())
+            .unwrap_or_else(|| provider.default_base_url().to_string())
             .trim_end_matches('/')
             .to_string();
 
@@ -35,45 +50,98 @@ impl TypeSafeClient {
         Ok(Self {
             api_key,
             base_url,
+            provider,
             client,
         })
     }
 
-    /// Evaluates a `SystemOneRequest` synchronously against `/v1/systemone`.
+    /// Full evaluation endpoint URL for the configured provider.
+    pub fn endpoint(&self) -> String {
+        format!("{}{}", self.base_url, self.provider.decisions_path())
+    }
+
+    /// Evaluates a `SystemOneRequest` synchronously against the provider endpoint.
     pub fn evaluate(&self, request: &SystemOneRequest) -> Result<SystemOneResponse> {
-        let endpoint = format!("{}/v1/systemone", self.base_url);
+        let endpoint = self.endpoint();
         let user_agent = format!("jeb/{}", env!("CARGO_PKG_VERSION"));
 
-        let response = self
+        let mut call = self
             .client
             .post(&endpoint)
             .bearer_auth(&self.api_key)
             .header("Content-Type", "application/json")
-            .header("User-Agent", user_agent)
-            .json(request)
-            .send()
-            .with_context(|| {
-                format!("Failed to send request to TypeSafe endpoint: {}", endpoint)
-            })?;
+            .header("User-Agent", user_agent);
+        if self.provider == Provider::Openrouter {
+            call = call
+                .header("HTTP-Referer", OPENROUTER_REFERER)
+                .header("X-Title", "jeb");
+        }
+
+        let response = call.json(request).send().with_context(|| {
+            format!("Failed to send request to decision endpoint: {}", endpoint)
+        })?;
 
         let status = response.status();
         let body_text = response
             .text()
-            .context("Failed to read response body from TypeSafe API")?;
+            .context("Failed to read response body from decision API")?;
 
         if !status.is_success() {
             bail!(
-                "TypeSafe API error (status {}): {}",
+                "Decision API error (status {}): {}",
                 status,
                 parse_api_error_message(&body_text)
             );
         }
 
         let parsed: SystemOneResponse = serde_json::from_str(&body_text)
-            .with_context(|| format!("Failed to parse TypeSafe response JSON: {}", body_text))?;
+            .with_context(|| format!("Failed to parse decision response JSON: {}", body_text))?;
 
         Ok(parsed)
     }
+}
+
+/// Fetches the OpenRouter decision model catalog.
+pub fn fetch_openrouter_models(
+    base_url: &str,
+    api_key: Option<&str>,
+    timeout_secs: u64,
+) -> Result<Vec<ModelInfo>> {
+    if timeout_secs == 0 {
+        bail!("Timeout must be greater than zero seconds.");
+    }
+    let client = Client::builder()
+        .timeout(Duration::from_secs(timeout_secs))
+        .build()
+        .context("Failed to build HTTP client")?;
+    let url = format!(
+        "{}/api/v1/models?output_modalities=decisions",
+        base_url.trim_end_matches('/')
+    );
+    let mut call = client
+        .get(&url)
+        .header("Content-Type", "application/json")
+        .header("User-Agent", format!("jeb/{}", env!("CARGO_PKG_VERSION")));
+    if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
+        call = call.bearer_auth(key);
+    }
+    let response = call
+        .send()
+        .with_context(|| format!("Failed to fetch model catalog: {}", url))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .context("Failed to read model catalog response")?;
+    if !status.is_success() {
+        bail!(
+            "Model catalog error (status {}): {}",
+            status,
+            parse_api_error_message(&body)
+        );
+    }
+    let parsed: OpenRouterModelsResponse =
+        serde_json::from_str(&body).context("Failed to parse model catalog JSON")?;
+    Ok(parse_model_catalog(&parsed))
 }
 
 /// Extracts a concise message from an API error body.
@@ -112,12 +180,26 @@ mod tests {
 
     #[test]
     fn test_client_rejects_zero_timeout() {
-        let result = TypeSafeClient::new(
+        let result = DecisionsClient::new(
             "dummy-key".to_string(),
             Some("https://api.typesafe.ai".to_string()),
             0,
+            Provider::Typesafe,
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_endpoint_per_provider() {
+        let typesafe =
+            DecisionsClient::new("dummy-key".to_string(), None, 30, Provider::Typesafe).unwrap();
+        assert_eq!(typesafe.endpoint(), "https://api.typesafe.ai/v1/systemone");
+        let openrouter =
+            DecisionsClient::new("dummy-key".to_string(), None, 30, Provider::Openrouter).unwrap();
+        assert_eq!(
+            openrouter.endpoint(),
+            "https://openrouter.ai/api/alpha/decisions"
+        );
     }
 
     #[test]

@@ -8,12 +8,14 @@
 
 | Flag | Env Var | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `-k`, `--api-key` | `TYPESAFE_API_KEY` | *(Required)* | TypeSafe API key |
-| `-m`, `--model` | `TYPESAFE_MODEL` | `jev-latest` | Evaluation model |
-| `--base-url` | `TYPESAFE_BASE_URL` | `https://api.typesafe.ai` | API endpoint base URL |
+| `-k`, `--api-key` | `TYPESAFE_API_KEY` / `OPENROUTER_API_KEY` | *(Required)* | Provider API key |
+| `-m`, `--model` | `TYPESAFE_MODEL` / `OPENROUTER_MODEL` | `jev-latest` / `typesafe/jev-1.13` | Evaluation model |
+| `--base-url` | `TYPESAFE_BASE_URL` / `OPENROUTER_BASE_URL` | per-provider default | API endpoint base URL |
 | `--timeout` | — | `30` | Request timeout (seconds) |
 | `-p`, `--pretty` | — | `false` | Pretty-print JSON output |
 | `-d`, `--decision-only` | — | `false` | Output top decisions only |
+| `--provider` | `JEB_PROVIDER` | `typesafe` | Decision API provider (`typesafe`, `openrouter`) |
+| `--list-models` | — | `false` | List OpenRouter decision models and exit |
 | `-f`, `--file` | — | — | Read input JSON from file |
 | `--state` | — | — | State text/JSON for quick mode |
 | `--choice` | — | — | `ID:Instructions` for choice |

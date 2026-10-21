@@ -1,0 +1,40 @@
+{
+  "model": "typesafe/jev-1.13-20260917",
+  "answers": {
+    "critical_sev": {
+      "type": "noul",
+      "noul": 0.53
+    },
+    "risk": {
+      "type": "score",
+      "score": 2.28,
+      "legend": {
+        "0": "Low",
+        "1": "Moderate",
+        "2": "High",
+        "3": "Extreme"
+      },
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.01,
+        "2": 0.7,
+        "3": 0.29
+      },
+      "confidence": 0.7
+    },
+    "triage_action": {
+      "type": "choice",
+      "choice": "rollback",
+      "probabilities": {
+        "restart": 0.0,
+        "rollback": 1.0,
+        "scale_db": 0.0
+      },
+      "confidence": 1.0
+    }
+  },
+  "usage": {
+    "input_tokens": 434,
+    "output_tokens": 72
+  }
+}

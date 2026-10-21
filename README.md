@@ -34,6 +34,20 @@ export TYPESAFE_API_KEY="your-api-key"
 You can also place it in a `.env` file in the working directory.
 `jeb` loads `.env` at startup. Explicit environment variables take precedence.
 
+### Providers
+
+`jeb` supports two decision APIs. Select with `--provider` (`JEB_PROVIDER` env, default `typesafe`).
+
+| Provider | Endpoint | Key env | Model env | Default model |
+| :--- | :--- | :--- | :--- | :--- |
+| `typesafe` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | `TYPESAFE_MODEL` | `jev-latest` |
+| `openrouter` | `https://openrouter.ai` | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `typesafe/jev-1.13` |
+
+```bash
+jeb --provider openrouter --list-models
+jeb --provider openrouter --state "..." --choice "a:Pick one" --option "x=Do X" -d
+```
+
 Optional settings:
 ```bash
 export TYPESAFE_MODEL="jev-latest"               # default: jev-latest
