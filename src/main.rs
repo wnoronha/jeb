@@ -234,6 +234,9 @@ fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
             if criteria.is_empty() {
                 bail!("Choice question requires at least one --option key=description");
             }
+            if questions.contains_key(&id) {
+                bail!("Duplicate question id '{}'", id);
+            }
             questions.insert(
                 id,
                 Question::Choice {
@@ -256,6 +259,9 @@ fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
                         .map(|text| serde_json::Value::String(text.trim().to_string())),
                 }),
             };
+            if questions.contains_key(&id) {
+                bail!("Duplicate question id '{}'", id);
+            }
             questions.insert(
                 id,
                 Question::Noul {
@@ -278,6 +284,9 @@ fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
             }
             if criteria.len() < 2 {
                 bail!("Score question requires at least 2 levels via --level");
+            }
+            if questions.contains_key(&id) {
+                bail!("Duplicate question id '{}'", id);
             }
             questions.insert(
                 id,
@@ -638,6 +647,31 @@ mod tests {
             resolve_api_key(Some("k".to_string()), "JEB_TEST_UNSET_7XQ2"),
             Some("k".to_string())
         );
+    }
+
+    #[test]
+    fn test_quick_rejects_duplicate_question_id() {
+        let cli = Cli {
+            input: None,
+            file: None,
+            model: None,
+            api_key: None,
+            base_url: None,
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: Some("state".to_string()),
+            choice: Some("task:Do this".to_string()),
+            options: vec!["a=First".to_string()],
+            noul: Some("task:Is it done?".to_string()),
+            noul_true: None,
+            noul_false: None,
+            score: None,
+            levels: vec![],
+            provider: Provider::Typesafe,
+            list_models: false,
+        };
+        assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
 
     #[test]
