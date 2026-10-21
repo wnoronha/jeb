@@ -422,19 +422,20 @@ fn parse_json_payload(
                     serde_json::Value::String(default_model.to_string()),
                 );
             }
-            Some(serde_json::Value::Null) => {
-                bail!("Invalid payload: \"model\" must not be null");
+            Some(serde_json::Value::String(text)) => {
+                if text.trim().is_empty() {
+                    bail!("Invalid payload: \"model\" must not be blank");
+                }
+                if model_explicit {
+                    obj.insert(
+                        "model".to_string(),
+                        serde_json::Value::String(default_model.to_string()),
+                    );
+                }
             }
-            Some(serde_json::Value::String(text)) if text.trim().is_empty() => {
-                bail!("Invalid payload: \"model\" must not be blank");
+            Some(_) => {
+                bail!("Invalid payload: \"model\" must be a non-empty string");
             }
-            _ if model_explicit => {
-                obj.insert(
-                    "model".to_string(),
-                    serde_json::Value::String(default_model.to_string()),
-                );
-            }
-            _ => {}
         }
     }
 
@@ -995,13 +996,20 @@ mod tests {
 
     #[test]
     fn test_parse_json_payload_rejects_null_model() {
-        let json = r#"{"model": null, "state": "x", "questions": {}}"#;
+        let json = r#"{"model": null, "state": "x", "questions": {"q": {"type": "noul", "instructions": "Proceed?"}}}"#;
         assert!(parse_json_payload(json, "default-model", false).is_err());
     }
 
     #[test]
     fn test_parse_json_payload_rejects_blank_model() {
-        let json = r#"{"model": "  ", "state": "x", "questions": {}}"#;
+        let json = r#"{"model": "  ", "state": "x", "questions": {"q": {"type": "noul", "instructions": "Proceed?"}}}"#;
+        assert!(parse_json_payload(json, "default-model", false).is_err());
+    }
+
+    #[test]
+    fn test_parse_json_payload_rejects_non_string_model() {
+        let json = r#"{"model": 123, "state": "x", "questions": {"q": {"type": "noul", "instructions": "Proceed?"}}}"#;
+        assert!(parse_json_payload(json, "flag-model", true).is_err());
         assert!(parse_json_payload(json, "default-model", false).is_err());
     }
 
