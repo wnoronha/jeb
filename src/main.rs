@@ -489,6 +489,21 @@ fn print_decision_summary(response: &SystemOneResponse, pretty: bool) -> Result<
     Ok(())
 }
 
+/// Resolves a score to its legend label, preferring the rounded value
+/// and falling back to the nearest numeric key.
+fn score_decision_label(legend: &BTreeMap<String, String>, score: f64) -> String {
+    let target = score.round() as i64;
+    if let Some(label) = legend.get(&target.to_string()) {
+        return label.clone();
+    }
+    legend
+        .iter()
+        .filter_map(|(key, label)| key.parse::<i64>().ok().map(|n| (n, label)))
+        .min_by_key(|(n, _)| (n - target).abs())
+        .map(|(_, label)| label.clone())
+        .unwrap_or_else(|| score.to_string())
+}
+
 /// Builds the decision-only JSON value for a response.
 fn build_decision_value(response: &SystemOneResponse) -> serde_json::Value {
     let mut decisions = BTreeMap::new();
@@ -535,6 +550,7 @@ fn build_decision_value(response: &SystemOneResponse) -> serde_json::Value {
                     k,
                     serde_json::json!({
                         "type": "score",
+                        "decision": score_decision_label(legend, *score),
                         "score": score,
                         "legend": legend,
                         "probabilities": probabilities,
@@ -1018,6 +1034,31 @@ mod tests {
             }
             _ => panic!("Expected noul question"),
         }
+    }
+
+    #[test]
+    fn test_score_decision_label_exact() {
+        let legend: BTreeMap<String, String> = [
+            ("0".to_string(), "Low".to_string()),
+            ("2".to_string(), "High".to_string()),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(score_decision_label(&legend, 2.0), "High");
+    }
+
+    #[test]
+    fn test_score_decision_label_rounds_and_falls_back() {
+        let legend: BTreeMap<String, String> = [
+            ("0".to_string(), "Low".to_string()),
+            ("1".to_string(), "Medium".to_string()),
+            ("2".to_string(), "High".to_string()),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(score_decision_label(&legend, 1.6), "High");
+        assert_eq!(score_decision_label(&legend, 5.0), "High");
+        assert_eq!(score_decision_label(&BTreeMap::new(), 1.0), "1".to_string());
     }
 
     #[test]
