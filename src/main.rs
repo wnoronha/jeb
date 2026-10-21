@@ -1220,6 +1220,7 @@ mod tests {
         let value = build_decision_value(&resp);
         let risk = &value["decisions"]["risk"];
         assert_eq!(risk["score"], 2.0);
+        assert_eq!(risk["decision"], "High");
         assert_eq!(risk["legend"]["2"], "High");
         assert_eq!(risk["probabilities"]["2"], 0.9);
         assert_eq!(value["decisions"]["ok"]["decision"], "yes");
@@ -1276,6 +1277,9 @@ mod tests {
         assert_eq!(summary["decisions"][choice_id]["type"], "choice");
         assert_eq!(summary["decisions"][noul_id]["type"], "noul");
         assert_eq!(summary["decisions"][score_id]["type"], "score");
+        assert!(summary["decisions"][score_id]["decision"]
+            .as_str()
+            .is_some_and(|s| !s.is_empty()));
     }
 
     #[test]
