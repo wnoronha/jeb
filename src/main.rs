@@ -330,11 +330,13 @@ fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
             bail!("Quick mode with --state requires at least one question flag (--choice, --noul, or --score)");
         }
 
-        return Ok(SystemOneRequest {
+        let req = SystemOneRequest {
             model,
             state: state_val,
             questions,
-        });
+        };
+        validate_request(&req)?;
+        return Ok(req);
     }
 
     // 2. If file is passed
@@ -369,6 +371,31 @@ fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
     }
 
     bail!("No input provided. Provide JSON as an argument, pipe through stdin, use --file, or specify --state and question flags.");
+}
+
+/// Validates structural rules shared by quick-mode and JSON inputs.
+fn validate_request(req: &SystemOneRequest) -> Result<()> {
+    if req.questions.is_empty() {
+        bail!("Payload must contain at least one question");
+    }
+    for (id, question) in &req.questions {
+        match question {
+            Question::Choice { criteria, .. } if criteria.is_empty() => {
+                bail!(
+                    "Choice question '{}' requires at least one criteria entry",
+                    id
+                );
+            }
+            Question::Score { criteria, .. } if criteria.len() < 2 => {
+                bail!(
+                    "Score question '{}' requires at least 2 criteria levels",
+                    id
+                );
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// Parses raw JSON string and applies the resolved model.
@@ -413,6 +440,7 @@ fn parse_json_payload(
 
     let req: SystemOneRequest = serde_json::from_value(val)
         .context("Failed to deserialize payload into SystemOneRequest format")?;
+    validate_request(&req)?;
     Ok(req)
 }
 
@@ -624,6 +652,58 @@ mod tests {
         let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
         assert_eq!(resp.model, "jev-1.13.0");
         assert_eq!(resp.answers.len(), 2);
+    }
+
+    #[test]
+    fn test_validate_request_rejects_empty_questions() {
+        let req = SystemOneRequest {
+            model: "jev-latest".to_string(),
+            state: serde_json::json!("x"),
+            questions: BTreeMap::new(),
+        };
+        assert!(validate_request(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_request_rejects_empty_choice() {
+        let mut questions = BTreeMap::new();
+        questions.insert(
+            "c".to_string(),
+            Question::Choice {
+                instructions: serde_json::json!("Pick"),
+                criteria: BTreeMap::new(),
+            },
+        );
+        let req = SystemOneRequest {
+            model: "jev-latest".to_string(),
+            state: serde_json::json!("x"),
+            questions,
+        };
+        assert!(validate_request(&req).is_err());
+    }
+
+    #[test]
+    fn test_validate_request_rejects_short_score() {
+        let mut questions = BTreeMap::new();
+        questions.insert(
+            "s".to_string(),
+            Question::Score {
+                instructions: serde_json::json!("Rate"),
+                criteria: vec![serde_json::json!("Low")],
+            },
+        );
+        let req = SystemOneRequest {
+            model: "jev-latest".to_string(),
+            state: serde_json::json!("x"),
+            questions,
+        };
+        assert!(validate_request(&req).is_err());
+    }
+
+    #[test]
+    fn test_parse_json_payload_rejects_empty_questions() {
+        let json = r#"{"model": "m", "state": "x", "questions": {}}"#;
+        assert!(parse_json_payload(json, "m", false).is_err());
     }
 
     #[test]
