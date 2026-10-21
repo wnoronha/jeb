@@ -2,6 +2,7 @@
   "assignee": "",
   "blocked_by": [],
   "blocks": [],
+  "closed_at": "2026-10-21T01:50:23Z",
   "created": "2026-10-21T01:38:49Z",
   "description": "src/main.rs has grown to 1,581 lines, with over 1,000 lines (lines 571-1581) dedicated to inline unit tests and repetitive fixture test functions. Extract core modules, validation, and decision formatting into src/lib.rs, keep src/main.rs as a focused CLI entrypoint with CLI-specific unit tests, and move all provider fixture assertions into an integration test suite at tests/fixtures.rs.\n\nAcceptance Criteria:\n1. Cargo builds both lib (src/lib.rs) and bin (src/main.rs) targets cleanly.\n2. Core types (types), HTTP client (client), request validation (validate_request, parse_json_payload), and decision formatting (build_decision_value, score_decision_label, print_decision_summary) are exposed from src/lib.rs.\n3. src/main.rs contains only CLI argument parsing, entrypoint orchestration, and unit tests for CLI flag resolution/parsing.\n4. All live fixture assertions across typesafe and openrouter live in tests/fixtures.rs as Cargo integration tests.\n5. cargo test, cargo clippy --all-targets -- -D warnings, and cargo fmt --check pass with 0 warnings.\n\nagent: gemini-4-argon (antigravity)",
   "id": "jeb-mj6",
@@ -17,8 +18,8 @@
     }
   ],
   "priority": 1,
-  "status": "open",
+  "status": "closed",
   "title": "Decompose src/main.rs into library crate and integration fixture tests",
   "type": "epic",
-  "updated_at": "2026-10-21T01:42:56Z"
+  "updated_at": "2026-10-21T01:50:23Z"
 }
