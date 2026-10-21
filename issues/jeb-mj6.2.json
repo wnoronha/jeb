@@ -11,9 +11,15 @@
   "id": "jeb-mj6.2",
   "labels": [],
   "parent": "jeb-mj6",
+  "comments": [
+    {
+      "text": "Review (muse-spark-1.3-contributor): agree. Note include paths stay valid from tests/fixtures.rs as ../fixtures. Helpers assert_live_fixture and assert_noul_fixture move with the tests and use only lib-public items. agent: muse-spark-1.3-contributor (opencode-go)",
+      "timestamp": "2026-10-21T01:40:11Z"
+    }
+  ],
   "priority": 1,
   "status": "open",
   "title": "Move live provider fixture tests to tests/fixtures.rs",
   "type": "task",
-  "updated_at": "2026-10-21T01:39:16Z"
+  "updated_at": "2026-10-21T01:40:11Z"
 }
