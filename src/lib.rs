@@ -5,7 +5,7 @@ pub mod types;
 
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
-use types::{Answer, Question, SystemOneRequest, SystemOneResponse};
+use types::{Answer, Provider, Question, SystemOneRequest, SystemOneResponse};
 
 /// Probability at or above which a noul answer maps to yes.
 const NOUL_YES_THRESHOLD: f64 = 0.5;
@@ -209,6 +209,50 @@ pub fn build_decision_value(response: &SystemOneResponse) -> serde_json::Value {
         "decisions": decisions,
         "usage": response.usage
     })
+}
+
+/// Resolves a setting from the explicit flag value, then the provider
+/// env fallback, then the provider default. Blank values count as unset.
+pub fn resolve_setting(explicit: Option<String>, fallback_env: &str, default: &str) -> String {
+    if let Some(value) = explicit {
+        if !value.trim().is_empty() {
+            return value;
+        }
+    }
+    if let Ok(value) = std::env::var(fallback_env) {
+        if !value.trim().is_empty() {
+            return value;
+        }
+    }
+    default.to_string()
+}
+
+/// Resolves an API key from the explicit flag value or the provider env fallback.
+pub fn resolve_api_key(explicit: Option<String>, fallback_env: &str) -> Option<String> {
+    if let Some(value) = explicit {
+        if !value.trim().is_empty() {
+            return Some(value);
+        }
+    }
+    std::env::var(fallback_env)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+}
+
+/// Resolves the model and reports whether the value came from an
+/// explicit flag or provider env override as opposed to the default.
+pub fn resolve_model(explicit: Option<String>, provider: Provider) -> (String, bool) {
+    if let Some(value) = explicit {
+        if !value.trim().is_empty() {
+            return (value, true);
+        }
+    }
+    if let Ok(value) = std::env::var(provider.model_env()) {
+        if !value.trim().is_empty() {
+            return (value, true);
+        }
+    }
+    (provider.default_model().to_string(), false)
 }
 
 #[cfg(test)]
@@ -499,5 +543,41 @@ mod tests {
         }"#;
         let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
         assert_eq!(resp.usage.input_tokens, 5_000_000_000);
+    }
+    #[test]
+    fn test_resolve_setting_prefers_explicit() {
+        assert_eq!(
+            resolve_setting(
+                Some("explicit".to_string()),
+                "JEB_TEST_UNSET_7XQ2",
+                "fallback-default"
+            ),
+            "explicit"
+        );
+    }
+
+    #[test]
+    fn test_resolve_setting_uses_default_when_unset() {
+        assert_eq!(
+            resolve_setting(None, "JEB_TEST_UNSET_7XQ2", "fallback-default"),
+            "fallback-default"
+        );
+        assert_eq!(
+            resolve_setting(
+                Some("  ".to_string()),
+                "JEB_TEST_UNSET_7XQ2",
+                "fallback-default"
+            ),
+            "fallback-default"
+        );
+    }
+
+    #[test]
+    fn test_resolve_api_key_none_when_unset() {
+        assert_eq!(resolve_api_key(None, "JEB_TEST_UNSET_7XQ2"), None);
+        assert_eq!(
+            resolve_api_key(Some("k".to_string()), "JEB_TEST_UNSET_7XQ2"),
+            Some("k".to_string())
+        );
     }
 }

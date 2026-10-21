@@ -4,7 +4,10 @@ use anyhow::{bail, Context, Result};
 use clap::{ArgAction, Parser};
 use jeb::client::{fetch_openrouter_models, DecisionsClient};
 use jeb::types::{NoulCriteria, Provider, Question, SystemOneRequest};
-use jeb::{parse_json_payload, print_decision_summary, validate_request};
+use jeb::{
+    parse_json_payload, print_decision_summary, resolve_api_key, resolve_model, resolve_setting,
+    validate_request,
+};
 use std::collections::BTreeMap;
 use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
@@ -146,50 +149,6 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Resolves a setting from the explicit flag value, then the provider
-/// env fallback, then the provider default. Blank values count as unset.
-fn resolve_setting(explicit: Option<String>, fallback_env: &str, default: &str) -> String {
-    if let Some(value) = explicit {
-        if !value.trim().is_empty() {
-            return value;
-        }
-    }
-    if let Ok(value) = std::env::var(fallback_env) {
-        if !value.trim().is_empty() {
-            return value;
-        }
-    }
-    default.to_string()
-}
-
-/// Resolves an API key from the explicit flag value or the provider env fallback.
-fn resolve_api_key(explicit: Option<String>, fallback_env: &str) -> Option<String> {
-    if let Some(value) = explicit {
-        if !value.trim().is_empty() {
-            return Some(value);
-        }
-    }
-    std::env::var(fallback_env)
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-}
-
-/// Resolves the model and reports whether the value came from an
-/// explicit flag or provider env override as opposed to the default.
-fn resolve_model(explicit: Option<String>, provider: Provider) -> (String, bool) {
-    if let Some(value) = explicit {
-        if !value.trim().is_empty() {
-            return (value, true);
-        }
-    }
-    if let Ok(value) = std::env::var(provider.model_env()) {
-        if !value.trim().is_empty() {
-            return (value, true);
-        }
-    }
-    (provider.default_model().to_string(), false)
 }
 
 /// Parses CLI inputs into a validated `SystemOneRequest`.
@@ -405,17 +364,35 @@ fn split_id_and_instructions(spec: &str, qtype: &str) -> Result<(String, String)
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_parse_quick_flags() {
-        let cli = Cli {
+    fn test_cli() -> Cli {
+        Cli {
             input: None,
             file: None,
-            model: Some("jev-latest".to_string()),
-            api_key: Some("dummy-key".to_string()),
-            base_url: Some("https://api.typesafe.ai".to_string()),
+            model: None,
+            api_key: None,
+            base_url: None,
             timeout: 30,
             pretty: false,
             decision_only: false,
+            state: None,
+            choice: None,
+            options: vec![],
+            noul: None,
+            noul_true: None,
+            noul_false: None,
+            provider: Provider::Typesafe,
+            list_models: false,
+            score: None,
+            levels: vec![],
+        }
+    }
+
+    #[test]
+    fn test_parse_quick_flags() {
+        let cli = Cli {
+            model: Some("jev-latest".to_string()),
+            api_key: Some("dummy-key".to_string()),
+            base_url: Some("https://api.typesafe.ai".to_string()),
             state: Some("Customer says: Please reset my password".to_string()),
             choice: Some("intent:What is the user requesting?".to_string()),
             options: vec![
@@ -423,12 +400,7 @@ mod tests {
                 "billing=Billing questions".to_string(),
             ],
             noul: Some("is_clear:Is the request clear?".to_string()),
-            noul_true: None,
-            noul_false: None,
-            provider: Provider::Typesafe,
-            list_models: false,
-            score: None,
-            levels: vec![],
+            ..test_cli()
         };
 
         let req = parse_request(&cli, Provider::Typesafe).unwrap();
@@ -453,63 +425,13 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_setting_prefers_explicit() {
-        assert_eq!(
-            resolve_setting(
-                Some("explicit".to_string()),
-                "JEB_TEST_UNSET_7XQ2",
-                "fallback-default"
-            ),
-            "explicit"
-        );
-    }
-
-    #[test]
-    fn test_resolve_setting_uses_default_when_unset() {
-        assert_eq!(
-            resolve_setting(None, "JEB_TEST_UNSET_7XQ2", "fallback-default"),
-            "fallback-default"
-        );
-        assert_eq!(
-            resolve_setting(
-                Some("  ".to_string()),
-                "JEB_TEST_UNSET_7XQ2",
-                "fallback-default"
-            ),
-            "fallback-default"
-        );
-    }
-
-    #[test]
-    fn test_resolve_api_key_none_when_unset() {
-        assert_eq!(resolve_api_key(None, "JEB_TEST_UNSET_7XQ2"), None);
-        assert_eq!(
-            resolve_api_key(Some("k".to_string()), "JEB_TEST_UNSET_7XQ2"),
-            Some("k".to_string())
-        );
-    }
-
-    #[test]
     fn test_quick_rejects_duplicate_question_id() {
         let cli = Cli {
-            input: None,
-            file: None,
-            model: None,
-            api_key: None,
-            base_url: None,
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
             state: Some("state".to_string()),
             choice: Some("task:Do this".to_string()),
             options: vec!["a=First".to_string()],
             noul: Some("task:Is it done?".to_string()),
-            noul_true: None,
-            noul_false: None,
-            score: None,
-            levels: vec![],
-            provider: Provider::Typesafe,
-            list_models: false,
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -519,22 +441,7 @@ mod tests {
         let cli = Cli {
             input: Some("{\"state\": \"x\"}".to_string()),
             file: Some(std::path::PathBuf::from("req.json")),
-            model: None,
-            api_key: None,
-            base_url: None,
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
-            state: None,
-            choice: None,
-            options: vec![],
-            noul: None,
-            noul_true: None,
-            noul_false: None,
-            score: None,
-            levels: vec![],
-            provider: Provider::Typesafe,
-            list_models: false,
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -542,24 +449,9 @@ mod tests {
     #[test]
     fn test_quick_rejects_question_flag_without_state() {
         let cli = Cli {
-            input: None,
-            file: None,
-            model: None,
-            api_key: None,
-            base_url: None,
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
-            state: None,
             choice: Some("task:Do this".to_string()),
             options: vec!["a=First".to_string()],
-            noul: None,
-            noul_true: None,
-            noul_false: None,
-            score: None,
-            levels: vec![],
-            provider: Provider::Typesafe,
-            list_models: false,
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -567,24 +459,10 @@ mod tests {
     #[test]
     fn test_quick_rejects_dangling_option() {
         let cli = Cli {
-            input: None,
-            file: None,
-            model: None,
-            api_key: None,
-            base_url: None,
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
             state: Some("state".to_string()),
-            choice: None,
             options: vec!["a=First".to_string()],
             noul: Some("safe:Is it safe?".to_string()),
-            noul_true: None,
-            noul_false: None,
-            score: None,
-            levels: vec![],
-            provider: Provider::Typesafe,
-            list_models: false,
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -592,24 +470,11 @@ mod tests {
     #[test]
     fn test_quick_rejects_dangling_level() {
         let cli = Cli {
-            input: None,
-            file: None,
-            model: None,
-            api_key: None,
-            base_url: None,
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
             state: Some("state".to_string()),
             choice: Some("task:Do this".to_string()),
             options: vec!["a=First".to_string()],
-            noul: None,
-            noul_true: None,
-            noul_false: None,
-            score: None,
             levels: vec!["High".to_string()],
-            provider: Provider::Typesafe,
-            list_models: false,
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -617,24 +482,11 @@ mod tests {
     #[test]
     fn test_quick_rejects_dangling_noul_labels() {
         let cli = Cli {
-            input: None,
-            file: None,
-            model: None,
-            api_key: None,
-            base_url: None,
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
             state: Some("state".to_string()),
-            choice: None,
-            options: vec![],
-            noul: None,
             noul_true: Some("Yes".to_string()),
-            noul_false: None,
             score: Some("risk:Rate it".to_string()),
             levels: vec!["Low".to_string(), "High".to_string()],
-            provider: Provider::Typesafe,
-            list_models: false,
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -642,24 +494,11 @@ mod tests {
     #[test]
     fn test_quick_rejects_state_with_file() {
         let cli = Cli {
-            input: None,
             file: Some(std::path::PathBuf::from("req.json")),
-            model: None,
-            api_key: None,
-            base_url: None,
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
             state: Some("state".to_string()),
             choice: Some("task:Do this".to_string()),
             options: vec!["a=First".to_string()],
-            noul: None,
-            noul_true: None,
-            noul_false: None,
-            score: None,
-            levels: vec![],
-            provider: Provider::Typesafe,
-            list_models: false,
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -667,24 +506,12 @@ mod tests {
     #[test]
     fn test_quick_choice_rejects_empty_option_key() {
         let cli = Cli {
-            input: None,
-            file: None,
             model: Some("jev-latest".to_string()),
-            api_key: None,
             base_url: Some("https://api.typesafe.ai".to_string()),
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
             state: Some("state".to_string()),
             choice: Some("task:Do this".to_string()),
             options: vec!["=desc".to_string()],
-            noul: None,
-            noul_true: None,
-            noul_false: None,
-            provider: Provider::Typesafe,
-            list_models: false,
-            score: None,
-            levels: vec![],
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -692,24 +519,12 @@ mod tests {
     #[test]
     fn test_quick_choice_rejects_duplicate_option_key() {
         let cli = Cli {
-            input: None,
-            file: None,
             model: Some("jev-latest".to_string()),
-            api_key: None,
             base_url: Some("https://api.typesafe.ai".to_string()),
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
             state: Some("state".to_string()),
             choice: Some("task:Do this".to_string()),
             options: vec!["a=First".to_string(), "a=Second".to_string()],
-            noul: None,
-            noul_true: None,
-            noul_false: None,
-            provider: Provider::Typesafe,
-            list_models: false,
-            score: None,
-            levels: vec![],
+            ..test_cli()
         };
         assert!(parse_request(&cli, Provider::Typesafe).is_err());
     }
@@ -717,24 +532,13 @@ mod tests {
     #[test]
     fn test_noul_criteria_flags() {
         let cli = Cli {
-            input: None,
-            file: None,
             model: Some("jev-latest".to_string()),
-            api_key: None,
             base_url: Some("https://api.typesafe.ai".to_string()),
-            timeout: 30,
-            pretty: false,
-            decision_only: false,
             state: Some("state".to_string()),
-            choice: None,
-            options: vec![],
             noul: Some("safe:Is it safe?".to_string()),
             noul_true: Some("Safe to proceed".to_string()),
             noul_false: Some("Unsafe".to_string()),
-            provider: Provider::Typesafe,
-            list_models: false,
-            score: None,
-            levels: vec![],
+            ..test_cli()
         };
         let req = parse_request(&cli, Provider::Typesafe).unwrap();
         match req.questions.get("safe").unwrap() {
