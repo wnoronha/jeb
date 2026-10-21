@@ -1,0 +1,38 @@
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "customer_impact": {
+      "type": "score",
+      "score": 0.91,
+      "legend": {
+        "0": "Down",
+        "1": "Degraded",
+        "2": "None"
+      },
+      "probabilities": {
+        "0": 0.09,
+        "1": 0.91,
+        "2": 0.0
+      },
+      "confidence": 0.86
+    },
+    "page_action": {
+      "type": "choice",
+      "choice": "escalate_incident",
+      "probabilities": {
+        "acknowledge_and_triage": 0.37,
+        "escalate_incident": 0.63,
+        "silence_and_observe": 0.0
+      },
+      "confidence": 0.45
+    },
+    "sev1": {
+      "type": "noul",
+      "noul": 0.71
+    }
+  },
+  "usage": {
+    "input_tokens": 448,
+    "output_tokens": 90
+  }
+}

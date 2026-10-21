@@ -897,4 +897,100 @@ mod tests {
             "jev-1.13.0",
         );
     }
+
+    #[test]
+    fn test_typesafe_fixture_dataeng() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_4_dataeng.json"),
+            include_str!("../fixtures/typesafe/resp_4_dataeng.json"),
+            "data_action",
+            "page_oncall",
+            "report_risk",
+            "jev-1.13.0",
+        );
+    }
+
+    #[test]
+    fn test_typesafe_fixture_refund() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_5_refund.json"),
+            include_str!("../fixtures/typesafe/resp_5_refund.json"),
+            "refund_action",
+            "needs_human_review",
+            "churn_risk",
+            "jev-1.13.0",
+        );
+    }
+
+    #[test]
+    fn test_typesafe_fixture_flags() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_6_flags.json"),
+            include_str!("../fixtures/typesafe/resp_6_flags.json"),
+            "rollout_action",
+            "within_budget",
+            "rollout_risk",
+            "jev-1.13.0",
+        );
+    }
+
+    #[test]
+    fn test_typesafe_fixture_oncall() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_7_oncall.json"),
+            include_str!("../fixtures/typesafe/resp_7_oncall.json"),
+            "page_action",
+            "sev1",
+            "customer_impact",
+            "jev-1.13.0",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_dataeng() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_4_dataeng.json"),
+            include_str!("../fixtures/openrouter/oresp_4_dataeng.json"),
+            "data_action",
+            "page_oncall",
+            "report_risk",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_refund() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_5_refund.json"),
+            include_str!("../fixtures/openrouter/oresp_5_refund.json"),
+            "refund_action",
+            "needs_human_review",
+            "churn_risk",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_flags() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_6_flags.json"),
+            include_str!("../fixtures/openrouter/oresp_6_flags.json"),
+            "rollout_action",
+            "within_budget",
+            "rollout_risk",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_oncall() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_7_oncall.json"),
+            include_str!("../fixtures/openrouter/oresp_7_oncall.json"),
+            "page_action",
+            "sev1",
+            "customer_impact",
+            "typesafe/jev-1.13-20260917",
+        );
+    }
 }

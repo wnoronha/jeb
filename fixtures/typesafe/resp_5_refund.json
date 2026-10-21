@@ -1,0 +1,38 @@
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "churn_risk": {
+      "type": "score",
+      "score": 0.1,
+      "legend": {
+        "0": "High",
+        "1": "Medium",
+        "2": "Low"
+      },
+      "probabilities": {
+        "0": 0.93,
+        "1": 0.04,
+        "2": 0.03
+      },
+      "confidence": 0.85
+    },
+    "needs_human_review": {
+      "type": "noul",
+      "noul": 0.39
+    },
+    "refund_action": {
+      "type": "choice",
+      "choice": "deny_and_explain",
+      "probabilities": {
+        "auto_refund": 0.0,
+        "deny_and_explain": 0.96,
+        "escalate_support": 0.04
+      },
+      "confidence": 0.94
+    }
+  },
+  "usage": {
+    "input_tokens": 439,
+    "output_tokens": 87
+  }
+}

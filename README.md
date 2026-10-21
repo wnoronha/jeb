@@ -149,6 +149,14 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
+Tests stay offline for CI. They assert committed fixtures in `fixtures/`.
+Regenerate a fixture in dev with:
+
+```bash
+scripts/fetch_fixture.sh fixtures/req_1_devops.json fixtures/typesafe/resp_1_devops.json
+scripts/fetch_fixture.sh fixtures/req_1_devops.json fixtures/openrouter/oresp_1_devops.json --provider openrouter
+```
+
 ---
 
 ## License
