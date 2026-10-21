@@ -181,13 +181,25 @@ fn resolve_api_key(explicit: Option<String>, fallback_env: &str) -> Option<Strin
         .filter(|value| !value.trim().is_empty())
 }
 
+/// Resolves the model and reports whether the value came from an
+/// explicit flag or provider env override as opposed to the default.
+fn resolve_model(explicit: Option<String>, provider: Provider) -> (String, bool) {
+    if let Some(value) = explicit {
+        if !value.trim().is_empty() {
+            return (value, true);
+        }
+    }
+    if let Ok(value) = std::env::var(provider.model_env()) {
+        if !value.trim().is_empty() {
+            return (value, true);
+        }
+    }
+    (provider.default_model().to_string(), false)
+}
+
 /// Parses CLI inputs into a validated `SystemOneRequest`.
 fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
-    let model = resolve_setting(
-        cli.model.clone(),
-        provider.model_env(),
-        provider.default_model(),
-    );
+    let (model, model_explicit) = resolve_model(cli.model.clone(), provider);
     // 1. If quick CLI flags are provided, construct request from flags
     if let Some(state_raw) = &cli.state {
         let state_val = serde_json::from_str::<serde_json::Value>(state_raw)
@@ -291,7 +303,7 @@ fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
     if let Some(path) = &cli.file {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read JSON file from {}", path.display()))?;
-        return parse_json_payload(&content, &model);
+        return parse_json_payload(&content, &model, model_explicit);
     }
 
     // 3. If input arg is passed
@@ -301,9 +313,9 @@ fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
             io::stdin()
                 .read_to_string(&mut buffer)
                 .context("Failed to read from stdin")?;
-            return parse_json_payload(&buffer, &model);
+            return parse_json_payload(&buffer, &model, model_explicit);
         } else {
-            return parse_json_payload(input, &model);
+            return parse_json_payload(input, &model, model_explicit);
         }
     }
 
@@ -314,31 +326,54 @@ fn parse_request(cli: &Cli, provider: Provider) -> Result<SystemOneRequest> {
             .read_to_string(&mut buffer)
             .context("Failed to read from stdin")?;
         if !buffer.trim().is_empty() {
-            return parse_json_payload(&buffer, &model);
+            return parse_json_payload(&buffer, &model, model_explicit);
         }
     }
 
     bail!("No input provided. Provide JSON as an argument, pipe through stdin, use --file, or specify --state and question flags.");
 }
 
-/// Parses raw JSON string and sets fallback model if omitted.
-fn parse_json_payload(raw: &str, default_model: &str) -> Result<SystemOneRequest> {
+/// Parses raw JSON string and applies the resolved model.
+/// An explicit flag or env model overrides the payload field.
+/// Otherwise the payload field applies when present and non-empty.
+fn parse_json_payload(
+    raw: &str,
+    default_model: &str,
+    model_explicit: bool,
+) -> Result<SystemOneRequest> {
     let mut val: serde_json::Value =
         serde_json::from_str(raw).context("Invalid JSON payload passed to jeb")?;
 
-    let obj = val.as_object_mut().ok_or_else(|| {
-        anyhow::anyhow!(
-            "Invalid payload: top-level JSON must be an object with state and questions"
-        )
-    })?;
-    if !obj.contains_key("model") {
-        obj.insert(
-            "model".to_string(),
-            serde_json::Value::String(default_model.to_string()),
-        );
+    {
+        let obj = val.as_object_mut().ok_or_else(|| {
+            anyhow::anyhow!(
+                "Invalid payload: top-level JSON must be an object with state and questions"
+            )
+        })?;
+        match obj.get("model") {
+            None => {
+                obj.insert(
+                    "model".to_string(),
+                    serde_json::Value::String(default_model.to_string()),
+                );
+            }
+            Some(serde_json::Value::Null) => {
+                bail!("Invalid payload: \"model\" must not be null");
+            }
+            Some(serde_json::Value::String(text)) if text.trim().is_empty() => {
+                bail!("Invalid payload: \"model\" must not be blank");
+            }
+            _ if model_explicit => {
+                obj.insert(
+                    "model".to_string(),
+                    serde_json::Value::String(default_model.to_string()),
+                );
+            }
+            _ => {}
+        }
     }
 
-    let req: SystemOneRequest = serde_json::from_value(serde_json::Value::Object(obj.clone()))
+    let req: SystemOneRequest = serde_json::from_value(val)
         .context("Failed to deserialize payload into SystemOneRequest format")?;
     Ok(req)
 }
@@ -480,7 +515,7 @@ mod tests {
             }
         }"#;
 
-        let req = parse_json_payload(json, "jev-latest").unwrap();
+        let req = parse_json_payload(json, "jev-latest", false).unwrap();
         assert_eq!(req.model, "jev-latest");
         assert_eq!(req.questions.len(), 3);
         assert!(matches!(
@@ -657,7 +692,33 @@ mod tests {
 
     #[test]
     fn test_parse_json_payload_rejects_non_object() {
-        assert!(parse_json_payload("[1, 2, 3]", "jev-latest").is_err());
+        assert!(parse_json_payload("[1, 2, 3]", "jev-latest", false).is_err());
+    }
+
+    #[test]
+    fn test_explicit_model_overrides_payload_model() {
+        let json = r#"{"model": "payload-model", "state": "x", "questions": {"q": {"type": "noul", "instructions": "Proceed?"}}}"#;
+        let req = parse_json_payload(json, "flag-model", true).unwrap();
+        assert_eq!(req.model, "flag-model");
+    }
+
+    #[test]
+    fn test_payload_model_kept_when_not_explicit() {
+        let json = r#"{"model": "payload-model", "state": "x", "questions": {"q": {"type": "noul", "instructions": "Proceed?"}}}"#;
+        let req = parse_json_payload(json, "default-model", false).unwrap();
+        assert_eq!(req.model, "payload-model");
+    }
+
+    #[test]
+    fn test_parse_json_payload_rejects_null_model() {
+        let json = r#"{"model": null, "state": "x", "questions": {}}"#;
+        assert!(parse_json_payload(json, "default-model", false).is_err());
+    }
+
+    #[test]
+    fn test_parse_json_payload_rejects_blank_model() {
+        let json = r#"{"model": "  ", "state": "x", "questions": {}}"#;
+        assert!(parse_json_payload(json, "default-model", false).is_err());
     }
 
     #[test]
