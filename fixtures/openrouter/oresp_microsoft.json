@@ -1,0 +1,13 @@
+{
+  "model": "microsoft/microsoft-decision-1-20261009",
+  "answers": {
+    "proceed": {
+      "type": "noul",
+      "noul": 0.09535024013553645
+    }
+  },
+  "usage": {
+    "input_tokens": 30,
+    "output_tokens": 1
+  }
+}

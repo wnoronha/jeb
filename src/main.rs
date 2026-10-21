@@ -840,4 +840,51 @@ mod tests {
             "typesafe/jev-1.13-20260917",
         );
     }
+
+    fn assert_noul_fixture(req_json: &str, resp_json: &str, id: &str, expected_model: &str) {
+        let req: SystemOneRequest = serde_json::from_str(req_json).unwrap();
+        assert!(matches!(
+            req.questions.get(id).unwrap(),
+            Question::Noul { .. }
+        ));
+
+        let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
+        assert_eq!(resp.model, expected_model);
+        match resp.answers.get(id).unwrap() {
+            Answer::Noul { noul } => assert!((0.0..=1.0).contains(noul)),
+            _ => panic!("Expected noul answer"),
+        }
+        let summary = build_decision_value(&resp);
+        assert_eq!(summary["decisions"][id]["type"], "noul");
+    }
+
+    #[test]
+    fn test_openrouter_fixture_openai() {
+        assert_noul_fixture(
+            include_str!("../fixtures/openrouter/oreq_ping.json"),
+            include_str!("../fixtures/openrouter/oresp_openai.json"),
+            "proceed",
+            "openai/gpt-6-luna-decisions-20261006",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_microsoft() {
+        assert_noul_fixture(
+            include_str!("../fixtures/openrouter/oreq_ping.json"),
+            include_str!("../fixtures/openrouter/oresp_microsoft.json"),
+            "proceed",
+            "microsoft/microsoft-decision-1-20261009",
+        );
+    }
+
+    #[test]
+    fn test_openrouter_fixture_cloudflare() {
+        assert_noul_fixture(
+            include_str!("../fixtures/openrouter/oreq_ping.json"),
+            include_str!("../fixtures/openrouter/oresp_cloudflare.json"),
+            "proceed",
+            "cloudflare/clef",
+        );
+    }
 }
