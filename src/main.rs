@@ -9,7 +9,10 @@ use client::TypeSafeClient;
 use std::collections::BTreeMap;
 use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
-use types::{Answer, Question, SystemOneRequest, SystemOneResponse};
+use types::{Answer, NoulCriteria, Question, SystemOneRequest, SystemOneResponse};
+
+/// Probability at or above which a noul answer maps to yes.
+const NOUL_YES_THRESHOLD: f64 = 0.5;
 
 /// CLI argument parser configuration for `jeb`.
 #[derive(Parser, Debug)]
@@ -72,6 +75,14 @@ struct Cli {
     #[arg(long, value_name = "ID:INSTRUCTIONS")]
     noul: Option<String>,
 
+    /// Description for the yes outcome of a noul question
+    #[arg(long, value_name = "DESC")]
+    noul_true: Option<String>,
+
+    /// Description for the no outcome of a noul question
+    #[arg(long, value_name = "DESC")]
+    noul_false: Option<String>,
+
     /// Add a score question: ID and instructions (e.g. --score "urgency:Rate urgency from 0 to 2")
     #[arg(long, value_name = "ID:INSTRUCTIONS")]
     score: Option<String>,
@@ -123,12 +134,23 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
             let mut criteria = BTreeMap::new();
             for opt in &cli.options {
                 if let Some((k, v)) = opt.split_once('=') {
-                    criteria.insert(
-                        k.trim().to_string(),
-                        serde_json::Value::String(v.trim().to_string()),
-                    );
+                    let key = k.trim().to_string();
+                    if key.is_empty() {
+                        bail!("Option key must not be empty in '--option \"{}\"'", opt);
+                    }
+                    if criteria.contains_key(&key) {
+                        bail!("Duplicate option key '{}'", key);
+                    }
+                    criteria.insert(key, serde_json::Value::String(v.trim().to_string()));
                 } else {
-                    criteria.insert(opt.trim().to_string(), serde_json::Value::Null);
+                    let key = opt.trim().to_string();
+                    if key.is_empty() {
+                        bail!("Option key must not be empty");
+                    }
+                    if criteria.contains_key(&key) {
+                        bail!("Duplicate option key '{}'", key);
+                    }
+                    criteria.insert(key, serde_json::Value::Null);
                 }
             }
             if criteria.is_empty() {
@@ -145,11 +167,22 @@ fn parse_request(cli: &Cli) -> Result<SystemOneRequest> {
 
         if let Some(noul_spec) = &cli.noul {
             let (id, instructions) = split_id_and_instructions(noul_spec, "noul")?;
+            let criteria = match (&cli.noul_true, &cli.noul_false) {
+                (None, None) => None,
+                (yes, no) => Some(NoulCriteria {
+                    r#true: yes
+                        .as_ref()
+                        .map(|text| serde_json::Value::String(text.trim().to_string())),
+                    r#false: no
+                        .as_ref()
+                        .map(|text| serde_json::Value::String(text.trim().to_string())),
+                }),
+            };
             questions.insert(
                 id,
                 Question::Noul {
                     instructions: serde_json::Value::String(instructions),
-                    criteria: None,
+                    criteria,
                 },
             );
         }
@@ -227,16 +260,19 @@ fn parse_json_payload(raw: &str, default_model: &str) -> Result<SystemOneRequest
     let mut val: serde_json::Value =
         serde_json::from_str(raw).context("Invalid JSON payload passed to jeb")?;
 
-    if val.get("model").is_none() {
-        if let Some(obj) = val.as_object_mut() {
-            obj.insert(
-                "model".to_string(),
-                serde_json::Value::String(default_model.to_string()),
-            );
-        }
+    let obj = val.as_object_mut().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Invalid payload: top-level JSON must be an object with state and questions"
+        )
+    })?;
+    if !obj.contains_key("model") {
+        obj.insert(
+            "model".to_string(),
+            serde_json::Value::String(default_model.to_string()),
+        );
     }
 
-    let req: SystemOneRequest = serde_json::from_value(val)
+    let req: SystemOneRequest = serde_json::from_value(serde_json::Value::Object(obj.clone()))
         .context("Failed to deserialize payload into SystemOneRequest format")?;
     Ok(req)
 }
@@ -244,7 +280,23 @@ fn parse_json_payload(raw: &str, default_model: &str) -> Result<SystemOneRequest
 /// Splits flag input of format `id:instructions` into constituent parts.
 fn split_id_and_instructions(spec: &str, qtype: &str) -> Result<(String, String)> {
     if let Some((id, inst)) = spec.split_once(':') {
-        Ok((id.trim().to_string(), inst.trim().to_string()))
+        let id = id.trim().to_string();
+        let inst = inst.trim().to_string();
+        if id.is_empty() {
+            bail!(
+                "Invalid format for --{}. Question id must not be empty in '{}'",
+                qtype,
+                spec
+            );
+        }
+        if inst.is_empty() {
+            bail!(
+                "Invalid format for --{}. Instructions must not be empty in '{}'",
+                qtype,
+                spec
+            );
+        }
+        Ok((id, inst))
     } else {
         bail!(
             "Invalid format for --{}. Expected 'question_id:Instructions text', got '{}'",
@@ -255,7 +307,23 @@ fn split_id_and_instructions(spec: &str, qtype: &str) -> Result<(String, String)
 }
 
 /// Formats and outputs the top decision summary.
+///
+/// Maps a noul probability at or above 0.5 to yes.
+/// Maps a lower probability to no.
 fn print_decision_summary(response: &SystemOneResponse, pretty: bool) -> Result<()> {
+    let out = build_decision_value(response);
+
+    if pretty {
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else {
+        println!("{}", serde_json::to_string(&out)?);
+    }
+
+    Ok(())
+}
+
+/// Builds the decision-only JSON value for a response.
+fn build_decision_value(response: &SystemOneResponse) -> serde_json::Value {
     let mut decisions = BTreeMap::new();
 
     for (k, ans) in &response.answers {
@@ -276,7 +344,11 @@ fn print_decision_summary(response: &SystemOneResponse, pretty: bool) -> Result<
                 );
             }
             Answer::Noul { noul } => {
-                let decision = if *noul >= 0.5 { "yes" } else { "no" };
+                let decision = if *noul >= NOUL_YES_THRESHOLD {
+                    "yes"
+                } else {
+                    "no"
+                };
                 decisions.insert(
                     k,
                     serde_json::json!({
@@ -287,13 +359,18 @@ fn print_decision_summary(response: &SystemOneResponse, pretty: bool) -> Result<
                 );
             }
             Answer::Score {
-                score, confidence, ..
+                score,
+                legend,
+                probabilities,
+                confidence,
             } => {
                 decisions.insert(
                     k,
                     serde_json::json!({
                         "type": "score",
                         "score": score,
+                        "legend": legend,
+                        "probabilities": probabilities,
                         "confidence": confidence
                     }),
                 );
@@ -301,19 +378,11 @@ fn print_decision_summary(response: &SystemOneResponse, pretty: bool) -> Result<
         }
     }
 
-    let out = serde_json::json!({
+    serde_json::json!({
         "model": response.model,
         "decisions": decisions,
         "usage": response.usage
-    });
-
-    if pretty {
-        println!("{}", serde_json::to_string_pretty(&out)?);
-    } else {
-        println!("{}", serde_json::to_string(&out)?);
-    }
-
-    Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -380,6 +449,8 @@ mod tests {
                 "billing=Billing questions".to_string(),
             ],
             noul: Some("is_clear:Is the request clear?".to_string()),
+            noul_true: None,
+            noul_false: None,
             score: None,
             levels: vec![],
         };
@@ -412,5 +483,136 @@ mod tests {
         let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
         assert_eq!(resp.model, "jev-1.13.0");
         assert_eq!(resp.answers.len(), 2);
+    }
+
+    #[test]
+    fn test_split_id_rejects_empty_id() {
+        assert!(split_id_and_instructions(":Do this", "choice").is_err());
+    }
+
+    #[test]
+    fn test_split_id_rejects_empty_instructions() {
+        assert!(split_id_and_instructions("task:", "choice").is_err());
+    }
+
+    #[test]
+    fn test_split_id_rejects_missing_separator() {
+        assert!(split_id_and_instructions("task", "choice").is_err());
+    }
+
+    #[test]
+    fn test_quick_choice_rejects_empty_option_key() {
+        let cli = Cli {
+            input: None,
+            file: None,
+            model: "jev-latest".to_string(),
+            api_key: None,
+            base_url: "https://api.typesafe.ai".to_string(),
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: Some("state".to_string()),
+            choice: Some("task:Do this".to_string()),
+            options: vec!["=desc".to_string()],
+            noul: None,
+            noul_true: None,
+            noul_false: None,
+            score: None,
+            levels: vec![],
+        };
+        assert!(parse_request(&cli).is_err());
+    }
+
+    #[test]
+    fn test_quick_choice_rejects_duplicate_option_key() {
+        let cli = Cli {
+            input: None,
+            file: None,
+            model: "jev-latest".to_string(),
+            api_key: None,
+            base_url: "https://api.typesafe.ai".to_string(),
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: Some("state".to_string()),
+            choice: Some("task:Do this".to_string()),
+            options: vec!["a=First".to_string(), "a=Second".to_string()],
+            noul: None,
+            noul_true: None,
+            noul_false: None,
+            score: None,
+            levels: vec![],
+        };
+        assert!(parse_request(&cli).is_err());
+    }
+
+    #[test]
+    fn test_parse_json_payload_rejects_non_object() {
+        assert!(parse_json_payload("[1, 2, 3]", "jev-latest").is_err());
+    }
+
+    #[test]
+    fn test_noul_criteria_flags() {
+        let cli = Cli {
+            input: None,
+            file: None,
+            model: "jev-latest".to_string(),
+            api_key: None,
+            base_url: "https://api.typesafe.ai".to_string(),
+            timeout: 30,
+            pretty: false,
+            decision_only: false,
+            state: Some("state".to_string()),
+            choice: None,
+            options: vec![],
+            noul: Some("safe:Is it safe?".to_string()),
+            noul_true: Some("Safe to proceed".to_string()),
+            noul_false: Some("Unsafe".to_string()),
+            score: None,
+            levels: vec![],
+        };
+        let req = parse_request(&cli).unwrap();
+        match req.questions.get("safe").unwrap() {
+            Question::Noul { criteria, .. } => {
+                assert!(criteria.is_some());
+            }
+            _ => panic!("Expected noul question"),
+        }
+    }
+
+    #[test]
+    fn test_build_decision_value_includes_score_legend() {
+        let resp_json = r#"{
+            "model": "jev-1.13.0",
+            "answers": {
+                "risk": {
+                    "type": "score",
+                    "score": 2.0,
+                    "legend": {"0": "Low", "2": "High"},
+                    "probabilities": {"0": 0.1, "2": 0.9},
+                    "confidence": 0.9
+                },
+                "ok": {"type": "noul", "noul": 0.8}
+            },
+            "usage": {"input_tokens": 10, "output_tokens": 5}
+        }"#;
+        let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
+        let value = build_decision_value(&resp);
+        let risk = &value["decisions"]["risk"];
+        assert_eq!(risk["score"], 2.0);
+        assert_eq!(risk["legend"]["2"], "High");
+        assert_eq!(risk["probabilities"]["2"], 0.9);
+        assert_eq!(value["decisions"]["ok"]["decision"], "yes");
+    }
+
+    #[test]
+    fn test_usage_accepts_large_values() {
+        let resp_json = r#"{
+            "model": "jev-1.13.0",
+            "answers": {},
+            "usage": {"input_tokens": 5000000000, "output_tokens": 7}
+        }"#;
+        let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
+        assert_eq!(resp.usage.input_tokens, 5_000_000_000);
     }
 }

@@ -19,6 +19,8 @@
 | `--choice` | — | — | `ID:Instructions` for choice |
 | `--option` | — | — | `key=Description` (repeatable) |
 | `--noul` | — | — | `ID:Instructions` for yes/no |
+| `--noul-true` | — | — | Description for yes outcome |
+| `--noul-false` | — | — | Description for no outcome |
 | `--score` | — | — | `ID:Instructions` for score |
 | `--level` | — | — | Level labels (repeatable/comma) |
 

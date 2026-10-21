@@ -90,9 +90,9 @@ pub enum Answer {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Usage {
     /// Number of prompt tokens processed.
-    pub input_tokens: u32,
+    pub input_tokens: u64,
     /// Number of output tokens generated.
-    pub output_tokens: u32,
+    pub output_tokens: u64,
 }
 
 /// System One response payload containing evaluated answers and usage stats.
@@ -108,7 +108,6 @@ pub struct SystemOneResponse {
 
 /// Error structure returned by the TypeSafe AI API on failure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct ApiErrorResponse {
     #[serde(default)]
     pub error: Option<Value>,
