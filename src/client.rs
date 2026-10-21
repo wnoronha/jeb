@@ -120,8 +120,9 @@ pub fn fetch_openrouter_models(
     );
     let mut call = client
         .get(&url)
-        .header("Content-Type", "application/json")
-        .header("User-Agent", format!("jeb/{}", env!("CARGO_PKG_VERSION")));
+        .header("User-Agent", format!("jeb/{}", env!("CARGO_PKG_VERSION")))
+        .header("HTTP-Referer", OPENROUTER_REFERER)
+        .header("X-Title", "jeb");
     if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
         call = call.bearer_auth(key);
     }
@@ -165,6 +166,15 @@ fn parse_api_error_message(body: &str) -> String {
                         return text.to_string();
                     }
                 }
+                serde_json::Value::Object(map) => {
+                    if let Some(message) = map.get("message").and_then(|v| v.as_str()) {
+                        let message = message.trim();
+                        if !message.is_empty() {
+                            return message.to_string();
+                        }
+                    }
+                    return serde_json::Value::Object(map).to_string();
+                }
                 other => {
                     return other.to_string();
                 }
@@ -200,6 +210,12 @@ mod tests {
             openrouter.endpoint(),
             "https://openrouter.ai/api/alpha/decisions"
         );
+    }
+
+    #[test]
+    fn test_parse_api_error_extracts_nested_message() {
+        let body = r#"{"error": {"message": "Invalid API key", "code": 401}}"#;
+        assert_eq!(parse_api_error_message(body), "Invalid API key");
     }
 
     #[test]
