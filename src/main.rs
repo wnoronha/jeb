@@ -617,4 +617,78 @@ mod tests {
         let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
         assert_eq!(resp.usage.input_tokens, 5_000_000_000);
     }
+
+    fn assert_live_fixture(
+        req_json: &str,
+        resp_json: &str,
+        choice_id: &str,
+        noul_id: &str,
+        score_id: &str,
+    ) {
+        let req: SystemOneRequest = serde_json::from_str(req_json).unwrap();
+        assert!(matches!(
+            req.questions.get(choice_id).unwrap(),
+            Question::Choice { .. }
+        ));
+        assert!(matches!(
+            req.questions.get(noul_id).unwrap(),
+            Question::Noul { .. }
+        ));
+        assert!(matches!(
+            req.questions.get(score_id).unwrap(),
+            Question::Score { .. }
+        ));
+
+        let resp: SystemOneResponse = serde_json::from_str(resp_json).unwrap();
+        assert_eq!(resp.model, "jev-1.13.0");
+        assert!(matches!(
+            resp.answers.get(choice_id).unwrap(),
+            Answer::Choice { .. }
+        ));
+        assert!(matches!(
+            resp.answers.get(noul_id).unwrap(),
+            Answer::Noul { .. }
+        ));
+        assert!(matches!(
+            resp.answers.get(score_id).unwrap(),
+            Answer::Score { .. }
+        ));
+        let summary = build_decision_value(&resp);
+        assert_eq!(summary["decisions"][choice_id]["type"], "choice");
+        assert_eq!(summary["decisions"][noul_id]["type"], "noul");
+        assert_eq!(summary["decisions"][score_id]["type"], "score");
+    }
+
+    #[test]
+    fn test_live_fixture_devops() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_1_devops.json"),
+            include_str!("../fixtures/resp_1_devops.json"),
+            "triage_action",
+            "critical_sev",
+            "risk",
+        );
+    }
+
+    #[test]
+    fn test_live_fixture_billing() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_2_billing.json"),
+            include_str!("../fixtures/resp_2_billing.json"),
+            "approval_route",
+            "policy_violation",
+            "review_priority",
+        );
+    }
+
+    #[test]
+    fn test_live_fixture_security() {
+        assert_live_fixture(
+            include_str!("../fixtures/req_3_security.json"),
+            include_str!("../fixtures/resp_3_security.json"),
+            "exploitability",
+            "needs_hotfix",
+            "severity",
+        );
+    }
 }
