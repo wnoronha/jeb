@@ -1,0 +1,13 @@
+{
+  "model": "cloudflare/clef",
+  "answers": {
+    "proceed": {
+      "type": "noul",
+      "noul": 0.2275
+    }
+  },
+  "usage": {
+    "input_tokens": 149,
+    "output_tokens": 0
+  }
+}

@@ -79,6 +79,14 @@
       "type": "noul",
       "decision": "yes",
       "probability": 0.94
+    },
+    "risk": {
+      "type": "score",
+      "decision": "High",
+      "score": 2.7,
+      "legend": { "0": "Low", "1": "Medium", "2": "High", "3": "Critical" },
+      "probabilities": { "0": 0.05, "1": 0.10, "2": 0.65, "3": 0.20 },
+      "confidence": 0.65
     }
   },
   "usage": {

@@ -1,0 +1,40 @@
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "abort_mission": {
+      "type": "noul",
+      "noul": 0.89
+    },
+    "airframe_risk": {
+      "type": "score",
+      "score": 2.9,
+      "legend": {
+        "0": "Low",
+        "1": "Moderate",
+        "2": "High",
+        "3": "Critical"
+      },
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.01,
+        "2": 0.08,
+        "3": 0.91
+      },
+      "confidence": 0.9
+    },
+    "flight_action": {
+      "type": "choice",
+      "choice": "rtl",
+      "probabilities": {
+        "continue_mission": 0.01,
+        "land_now": 0.35,
+        "rtl": 0.64
+      },
+      "confidence": 0.46
+    }
+  },
+  "usage": {
+    "input_tokens": 521,
+    "output_tokens": 78
+  }
+}

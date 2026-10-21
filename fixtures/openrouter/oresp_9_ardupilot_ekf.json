@@ -1,0 +1,40 @@
+{
+  "model": "typesafe/jev-1.13-20260917",
+  "answers": {
+    "ekf_action": {
+      "type": "choice",
+      "choice": "land_alt_hold",
+      "probabilities": {
+        "hold_loiter": 0.31,
+        "land_alt_hold": 0.61,
+        "switch_rtl": 0.08
+      },
+      "confidence": 0.41
+    },
+    "flyaway_risk": {
+      "type": "score",
+      "score": 1.49,
+      "legend": {
+        "0": "Negligible",
+        "1": "Moderate",
+        "2": "Severe",
+        "3": "Extreme"
+      },
+      "probabilities": {
+        "0": 0.02,
+        "1": 0.49,
+        "2": 0.46,
+        "3": 0.03
+      },
+      "confidence": 0.46
+    },
+    "mag_compromised": {
+      "type": "noul",
+      "noul": 0.76
+    }
+  },
+  "usage": {
+    "input_tokens": 513,
+    "output_tokens": 84
+  }
+}

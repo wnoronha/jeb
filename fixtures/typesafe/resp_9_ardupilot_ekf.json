@@ -1,0 +1,40 @@
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "ekf_action": {
+      "type": "choice",
+      "choice": "land_alt_hold",
+      "probabilities": {
+        "hold_loiter": 0.29,
+        "land_alt_hold": 0.64,
+        "switch_rtl": 0.07
+      },
+      "confidence": 0.46
+    },
+    "flyaway_risk": {
+      "type": "score",
+      "score": 1.51,
+      "legend": {
+        "0": "Negligible",
+        "1": "Moderate",
+        "2": "Severe",
+        "3": "Extreme"
+      },
+      "probabilities": {
+        "0": 0.02,
+        "1": 0.48,
+        "2": 0.47,
+        "3": 0.03
+      },
+      "confidence": 0.45
+    },
+    "mag_compromised": {
+      "type": "noul",
+      "noul": 0.76
+    }
+  },
+  "usage": {
+    "input_tokens": 513,
+    "output_tokens": 84
+  }
+}

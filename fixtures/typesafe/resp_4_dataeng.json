@@ -1,0 +1,38 @@
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "data_action": {
+      "type": "choice",
+      "choice": "quarantine",
+      "probabilities": {
+        "fail_job": 0.3,
+        "impute_default": 0.01,
+        "quarantine": 0.69
+      },
+      "confidence": 0.53
+    },
+    "page_oncall": {
+      "type": "noul",
+      "noul": 0.79
+    },
+    "report_risk": {
+      "type": "score",
+      "score": 1.95,
+      "legend": {
+        "0": "Negligible",
+        "1": "Moderate",
+        "2": "Severe"
+      },
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.05,
+        "2": 0.95
+      },
+      "confidence": 0.93
+    }
+  },
+  "usage": {
+    "input_tokens": 443,
+    "output_tokens": 80
+  }
+}

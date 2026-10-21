@@ -1,0 +1,38 @@
+{
+  "model": "typesafe/jev-1.13-20260917",
+  "answers": {
+    "rollout_action": {
+      "type": "choice",
+      "choice": "hold_10",
+      "probabilities": {
+        "hold_10": 0.59,
+        "ramp_to_50": 0.0,
+        "rollback_flag": 0.41
+      },
+      "confidence": 0.38
+    },
+    "rollout_risk": {
+      "type": "score",
+      "score": 1.99,
+      "legend": {
+        "0": "Low",
+        "1": "Guarded",
+        "2": "High"
+      },
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.01,
+        "2": 0.99
+      },
+      "confidence": 0.98
+    },
+    "within_budget": {
+      "type": "noul",
+      "noul": 0.25
+    }
+  },
+  "usage": {
+    "input_tokens": 452,
+    "output_tokens": 86
+  }
+}

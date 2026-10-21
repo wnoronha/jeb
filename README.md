@@ -31,6 +31,23 @@ Set your API key via environment variable:
 export TYPESAFE_API_KEY="your-api-key"
 ```
 
+You can also place it in a `.env` file in the working directory.
+`jeb` loads `.env` at startup. Explicit environment variables take precedence.
+
+### Providers
+
+`jeb` supports two decision APIs. Select with `--provider` (`JEB_PROVIDER` env, default `typesafe`).
+
+| Provider | Endpoint | Key env | Model env | Default model |
+| :--- | :--- | :--- | :--- | :--- |
+| `typesafe` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | `TYPESAFE_MODEL` | `jev-latest` |
+| `openrouter` | `https://openrouter.ai` | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` | `typesafe/jev-1.13` |
+
+```bash
+jeb --provider openrouter --list-models
+jeb --provider openrouter --state "..." --choice "a:Pick one" --option "x=Do X" -d
+```
+
 Optional settings:
 ```bash
 export TYPESAFE_MODEL="jev-latest"               # default: jev-latest
@@ -130,6 +147,14 @@ Output:
 cargo test
 cargo clippy --all-targets -- -D warnings
 cargo fmt --check
+```
+
+Tests stay offline for CI. They assert committed fixtures in `fixtures/`.
+Regenerate a fixture in dev with:
+
+```bash
+scripts/fetch_fixture.sh fixtures/req_1_devops.json fixtures/typesafe/resp_1_devops.json
+scripts/fetch_fixture.sh fixtures/req_1_devops.json fixtures/openrouter/oresp_1_devops.json --provider openrouter
 ```
 
 ---

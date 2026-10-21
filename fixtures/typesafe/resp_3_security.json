@@ -1,0 +1,40 @@
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "exploitability": {
+      "type": "choice",
+      "choice": "medium",
+      "probabilities": {
+        "high": 0.02,
+        "low": 0.0,
+        "medium": 0.98
+      },
+      "confidence": 0.97
+    },
+    "needs_hotfix": {
+      "type": "noul",
+      "noul": 0.8
+    },
+    "severity": {
+      "type": "score",
+      "score": 2.75,
+      "legend": {
+        "0": "Negligible",
+        "1": "Moderate",
+        "2": "Severe",
+        "3": "Critical"
+      },
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.01,
+        "2": 0.24,
+        "3": 0.75
+      },
+      "confidence": 0.74
+    }
+  },
+  "usage": {
+    "input_tokens": 434,
+    "output_tokens": 74
+  }
+}

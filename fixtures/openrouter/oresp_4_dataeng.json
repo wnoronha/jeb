@@ -1,0 +1,38 @@
+{
+  "model": "typesafe/jev-1.13-20260917",
+  "answers": {
+    "data_action": {
+      "type": "choice",
+      "choice": "quarantine",
+      "probabilities": {
+        "fail_job": 0.29,
+        "impute_default": 0.0,
+        "quarantine": 0.71
+      },
+      "confidence": 0.56
+    },
+    "page_oncall": {
+      "type": "noul",
+      "noul": 0.77
+    },
+    "report_risk": {
+      "type": "score",
+      "score": 1.96,
+      "legend": {
+        "0": "Negligible",
+        "1": "Moderate",
+        "2": "Severe"
+      },
+      "probabilities": {
+        "0": 0.0,
+        "1": 0.04,
+        "2": 0.96
+      },
+      "confidence": 0.94
+    }
+  },
+  "usage": {
+    "input_tokens": 443,
+    "output_tokens": 80
+  }
+}

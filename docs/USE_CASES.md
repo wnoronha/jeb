@@ -170,3 +170,134 @@ jeb \
   --noul "policy_violation:Does this invoice violate variance threshold policy (>50% variance without PO)?" \
   -d
 ```
+
+---
+
+## 5. Robotics & Autonomous Systems (ArduPilot Flight Telemetry)
+
+Evaluate real-time MAVLink (`SYS_STATUS`, `GLOBAL_POSITION_INT`, `VIBRATION`, `STATUSTEXT`) or ArduPilot DataFlash (`XKF4`, `GPS`, `RCOU`) telemetry on companion computers for autonomous failsafe and mode transitions.
+
+#### Option A: Raw JSON (Battery Failsafe in Headwind)
+```bash
+echo '{
+  "state": "ArduPilot telemetry: SYS_STATUS mode=GUIDED armed=true vbat=13.82V curr=29.4A rem=18%; GLOBAL_POSITION_INT alt_rel=42.8m dist_home=680m headwind=7.2m/s; STATUSTEXT SEVERITY_CRITICAL: Battery 1 low voltage failsafe triggered (13.82V < 14.00V).",
+  "questions": {
+    "flight_action": {
+      "type": "choice",
+      "instructions": "Select the immediate flight mode transition for the companion computer.",
+      "criteria": {
+        "continue_mission": "Remain in GUIDED mode and proceed to next waypoint",
+        "rtl": "Switch to RTL (Return-to-Launch) at current altitude",
+        "land_now": "Switch to LAND immediately at current GPS coordinates"
+      }
+    },
+    "abort_mission": {
+      "type": "noul",
+      "instructions": "Should the autonomous mission be aborted immediately?"
+    },
+    "airframe_risk": {
+      "type": "score",
+      "instructions": "Rate the risk of airframe loss if flight continues to the next waypoint.",
+      "criteria": ["Low", "Moderate", "High", "Critical"]
+    }
+  }
+}' | jeb -d
+```
+
+#### Option B: CLI Flags (EKF3 Lane Switch & Magnetometer Anomaly)
+```bash
+jeb \
+  --state "ArduPilot DataFlash: XKF4 vel_var=0.84 pos_horiz_var=0.92 compass_var=1.18; GPS status=3 num_sats=6 hdop=2.85; MSG: EKF3 IMU0 MAG0 ground mag anomaly, lane switch 0->1 while hovering 15m from steel structure." \
+  --choice "ekf_action:Select the safest navigation recovery action after the EKF lane switch." \
+  --option "hold_loiter=Switch to LOITER and wait for EKF variance to settle" \
+  --option "land_alt_hold=Switch to ALT_HOLD or LAND using barometric altitude" \
+  --option "switch_rtl=Trigger RTL using backup EKF lane" \
+  --noul "mag_compromised:Is the primary magnetometer heading unreliable for autonomous waypoint navigation?" \
+  --score "flyaway_risk:Rate the risk of flyaway or position divergence." \
+  --level "Negligible,Moderate,Severe,Extreme" \
+  -d
+```
+
+#### Option C: CLI Flags (IMU Vibration Clipping & Motor Saturation)
+```bash
+jeb \
+  --state "ArduPilot telemetry: VIBRATION vibe_x=44.2m/s2 vibe_y=48.9m/s2 vibe_z=74.6m/s2 clipping_0=312 clipping_1=245; RCOU C1=1890 C2=1510 C3=1910 C4=1495; STATUSTEXT SEVERITY_WARNING: High vibration and motor 1/3 saturation detected in AUTO survey." \
+  --choice "motor_action:Select the immediate flight response to the vibration and motor output imbalance." \
+  --option "continue_survey=Continue AUTO survey grid at current speed" \
+  --option "reduce_throttle_rtl=Reduce max velocity to 4m/s and command RTL" \
+  --option "emergency_land=Execute immediate vertical descent in LAND mode" \
+  --noul "clipping_critical:Does accelerometer clipping exceed safe attitude control margins?" \
+  --score "hardware_severity:Rate the severity of the propulsion and IMU vibration anomaly." \
+  --level "Normal,Elevated,Degraded,Hazardous" \
+  -d
+```
+
+---
+
+## 6. Model Evaluation & Benchmarking (Multi-Model Decision Matrix)
+
+Compare how different decision models evaluate identical request fixtures (`fixtures/req_*.json`) using cached responses in `fixtures/typesafe/` and `fixtures/openrouter/` (mapped in `tests/fixtures.rs` and normalized with `jeb::build_decision_value`), or expand the matrix with live calls.
+
+#### Option A: Offline Matrix via `jq` (`req_ping` across cached models)
+```bash
+jq -r '
+  [
+    .model,
+    (if .answers.proceed.noul >= 0.5 then "yes" else "no" end),
+    (.answers.proceed.noul | tostring),
+    (.usage.input_tokens | tostring)
+  ] | @tsv
+' fixtures/typesafe/resp_ping.json \
+  fixtures/openrouter/oresp_openai.json \
+  fixtures/openrouter/oresp_microsoft.json \
+  fixtures/openrouter/oresp_cloudflare.json | column -t
+```
+
+#### Option B: Offline Scenario Matrix (`req_1` to `req_10` across TypeSafe and OpenRouter Jev variants)
+```bash
+python3 - <<'PY'
+import glob, json, os
+
+rows = [("scenario", "model", "choice", "noul", "score")]
+for req_path in sorted(glob.glob("fixtures/req_[0-9]*.json")):
+    stem = os.path.basename(req_path).removeprefix("req_")
+    for resp_path in (f"fixtures/typesafe/resp_{stem}", f"fixtures/openrouter/oresp_{stem}"):
+        with open(resp_path) as f:
+            resp = json.load(f)
+        choice = noul = score = "-"
+        for k, ans in resp["answers"].items():
+            if ans["type"] == "choice":
+                choice = f"{k}={ans['choice']} ({ans['confidence']:.2f})"
+            elif ans["type"] == "noul":
+                decision = "yes" if ans["noul"] >= 0.5 else "no"
+                noul = f"{k}={decision} ({ans['noul']:.2f})"
+            elif ans["type"] == "score":
+                label = resp["answers"][k]["legend"].get(str(round(ans["score"])), str(ans["score"]))
+                score = f"{k}={label} ({ans['score']:.2f})"
+        rows.append((stem.removesuffix(".json"), resp["model"], choice, noul, score))
+
+widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+for r in rows:
+    print("  ".join(val.ljust(widths[i]) for i, val in enumerate(r)))
+PY
+```
+
+#### Option C: Live Expansion Across Models (`jeb` CLI and `scripts/fetch_fixture.sh`)
+```bash
+# Run a live decision summary against any OpenRouter decision model
+for model in \
+  typesafe/jev-1.13-20260917 \
+  openai/gpt-6-luna-decisions-20261006 \
+  microsoft/microsoft-decision-1-20261009 \
+  cloudflare/clef; do
+  jeb --provider openrouter --model "$model" --file fixtures/req_ping.json -d
+done
+
+# Record a new versioned response fixture for offline tests and evaluation matrices
+scripts/fetch_fixture.sh \
+  fixtures/req_1_devops.json \
+  fixtures/openrouter/oresp_1_devops_openai.json \
+  --provider openrouter \
+  --model openai/gpt-6-luna-decisions-20261006
+```
+
