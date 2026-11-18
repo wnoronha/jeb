@@ -6,7 +6,7 @@ use jeb::client::{fetch_openrouter_models, DecisionsClient};
 use jeb::render::render_summary;
 use jeb::request::Cli;
 use jeb::types::Provider;
-use jeb::{resolve_api_key, resolve_setting};
+use jeb::{has_failing_noul, resolve_api_key, resolve_setting};
 
 fn main() -> Result<()> {
     dotenvy::dotenv().ok();
@@ -70,6 +70,10 @@ fn main() -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&response)?);
     } else {
         println!("{}", serde_json::to_string(&response)?);
+    }
+
+    if cli.fail && has_failing_noul(&response) {
+        std::process::exit(1);
     }
 
     Ok(())

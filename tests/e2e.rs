@@ -51,6 +51,39 @@ fn live_openrouter_ping_shape() {
 
 #[test]
 #[ignore]
+fn live_fail_flag_follows_noul() {
+    if !live_enabled() {
+        eprintln!("skipped: set JEB_E2E=1 to run live e2e");
+        return;
+    }
+    let (ok, stdout) = run_jeb(&[
+        "--provider",
+        "openrouter",
+        "--file",
+        "fixtures/req_ping.json",
+    ]);
+    assert!(ok, "live ping exited nonzero");
+    let body: serde_json::Value =
+        serde_json::from_str(&stdout).expect("live ping printed invalid JSON");
+    let noul = body["answers"]["proceed"]["noul"]
+        .as_f64()
+        .expect("noul must be a number");
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_jeb"))
+        .args([
+            "--provider",
+            "openrouter",
+            "--file",
+            "fixtures/req_ping.json",
+            "--fail",
+        ])
+        .output()
+        .expect("failed to run jeb binary");
+    let expected = if noul < 0.5 { Some(1) } else { Some(0) };
+    assert_eq!(out.status.code(), expected);
+}
+
+#[test]
+#[ignore]
 fn live_openrouter_decision_only_shape() {
     if !live_enabled() {
         eprintln!("skipped: set JEB_E2E=1 to run live e2e");

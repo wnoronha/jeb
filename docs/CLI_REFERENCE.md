@@ -17,6 +17,7 @@
 | `--provider` | `JEB_PROVIDER` | `typesafe` | Decision API provider (`typesafe`, `openrouter`) |
 | `--list-models` | — | `false` | List OpenRouter decision models and exit |
 | `--dry-run` | — | `false` | Print the built request and exit without calling |
+| `--fail` | — | `false` | Exit 1 when any noul decision is no; output still prints |
 | `-f`, `--file` | — | — | Read input JSON from file |
 | `--state` | — | — | State text/JSON for quick mode |
 | `--choice` | — | — | `ID:Instructions` for choice |

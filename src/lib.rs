@@ -26,6 +26,14 @@ pub fn score_decision_label(legend: &BTreeMap<String, String>, score: f64) -> St
         .unwrap_or_else(|| score.to_string())
 }
 
+/// True when any noul answer falls below the yes threshold.
+pub fn has_failing_noul(response: &SystemOneResponse) -> bool {
+    response
+        .answers
+        .values()
+        .any(|answer| matches!(answer, Answer::Noul { noul } if *noul < NOUL_YES_THRESHOLD))
+}
+
 /// Builds the decision-only JSON value for a response.
 pub fn build_decision_value(response: &SystemOneResponse) -> serde_json::Value {
     let mut decisions = BTreeMap::new();
@@ -450,6 +458,25 @@ mod tests {
             ),
             "fallback-default"
         );
+    }
+
+    #[test]
+    fn test_has_failing_noul() {
+        let yes: SystemOneResponse = serde_json::from_str(
+            r#"{"model": "m", "answers": {"q": {"type": "noul", "noul": 0.8}}, "usage": {"input_tokens": 1, "output_tokens": 1}}"#,
+        )
+        .unwrap();
+        assert!(!has_failing_noul(&yes));
+        let no: SystemOneResponse = serde_json::from_str(
+            r#"{"model": "m", "answers": {"q": {"type": "noul", "noul": 0.2}}, "usage": {"input_tokens": 1, "output_tokens": 1}}"#,
+        )
+        .unwrap();
+        assert!(has_failing_noul(&no));
+        let choice: SystemOneResponse = serde_json::from_str(
+            r#"{"model": "m", "answers": {"c": {"type": "choice", "choice": "a", "probabilities": {"a": 1.0}, "confidence": 1.0}}, "usage": {"input_tokens": 1, "output_tokens": 1}}"#,
+        )
+        .unwrap();
+        assert!(!has_failing_noul(&choice));
     }
 
     #[test]

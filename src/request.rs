@@ -102,6 +102,10 @@ pub struct Cli {
     /// Print the built request JSON and exit without calling the API
     #[arg(long, default_value_t = false)]
     pub dry_run: bool,
+
+    /// Exit 1 when any noul decision is no. Output still prints.
+    #[arg(long, default_value_t = false)]
+    pub fail: bool,
 }
 
 impl Cli {
@@ -405,6 +409,7 @@ mod tests {
             provider: Provider::Typesafe,
             list_models: false,
             dry_run: false,
+            fail: false,
             score: vec![],
             levels: vec![],
         }
