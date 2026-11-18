@@ -228,7 +228,7 @@ impl Cli {
                         if criteria.contains_key(&key) {
                             bail!("Duplicate option key '{}'", key);
                         }
-                        criteria.insert(key, serde_json::Value::Null);
+                        criteria.insert(key.clone(), serde_json::Value::String(key));
                     }
                 }
                 if criteria.is_empty() {
@@ -611,6 +611,26 @@ mod tests {
             ..test_cli()
         };
         assert!(cli.build_request().is_err());
+    }
+
+    #[test]
+    fn test_bare_option_uses_key_as_description() {
+        let cli = Cli {
+            state: Some("state".to_string()),
+            choice: Some("task:Do this".to_string()),
+            options: vec!["restart".to_string()],
+            ..test_cli()
+        };
+        let req = cli.build_request().unwrap();
+        match req.questions.get("task").unwrap() {
+            Question::Choice { criteria, .. } => {
+                assert_eq!(
+                    criteria.get("restart").unwrap(),
+                    &serde_json::Value::String("restart".to_string())
+                );
+            }
+            _ => panic!("Expected choice question"),
+        }
     }
 
     #[test]
