@@ -313,7 +313,7 @@ pub enum Question {
 }
 
 /// Optional criteria descriptions for `noul` (yes/no) questions.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoulCriteria {
     /// Description for true/yes outcome.
     #[serde(rename = "true", skip_serializing_if = "Option::is_none")]
