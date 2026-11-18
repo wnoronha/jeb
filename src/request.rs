@@ -61,9 +61,15 @@ pub struct Cli {
     pub decision_only: bool,
 
     // Quick CLI builder flags (alternative to passing raw JSON)
-    /// Direct state text or JSON string for quick query mode
-    #[arg(long, value_name = "TEXT_OR_JSON")]
+    /// Direct state text for quick query mode. Always a plain string.
+    /// Use @file to load from a file, - to read piped stdin.
+    #[arg(long, value_name = "TEXT")]
     pub state: Option<String>,
+
+    /// State JSON for quick query mode. Must be valid JSON.
+    /// Supports @file and - like --state. Conflicts with --state.
+    #[arg(long, value_name = "JSON")]
+    pub state_json: Option<String>,
 
     /// Add a choice question: ID and instructions (e.g. --choice "next_step:What should be done?")
     #[arg(long, value_name = "ID:INSTRUCTIONS")]
@@ -125,6 +131,9 @@ impl Cli {
         if self.file.is_some() {
             dropped.push("--file");
         }
+        if self.state_json.is_some() {
+            dropped.push("--state-json");
+        }
         if self.state.is_some() {
             dropped.push("--state");
         }
@@ -177,9 +186,13 @@ impl Cli {
             bail!("--file cannot be combined with positional JSON input");
         }
 
+        if self.state.is_some() && self.state_json.is_some() {
+            bail!("--state cannot be combined with --state-json");
+        }
+        let has_state = self.state.is_some() || self.state_json.is_some();
         let has_question_flag =
             self.choice.is_some() || !self.noul.is_empty() || !self.score.is_empty();
-        if self.state.is_none() {
+        if !has_state {
             if has_question_flag {
                 bail!("Question flags (--choice, --noul, --score) require --state");
             }
@@ -209,12 +222,17 @@ impl Cli {
                 bail!("--level requires exactly one --score");
             }
             if self.file.is_some() || self.input.is_some() {
-                bail!("--state cannot be combined with --file or JSON input");
+                bail!("--state and --state-json cannot be combined with --file or JSON input");
             }
         }
         // 1. If quick CLI flags are provided, construct request from flags
-        if let Some(state_raw) = &self.state {
-            let state_val = read_quick_state(state_raw)?;
+        if has_state {
+            let state_val = match (&self.state, &self.state_json) {
+                (Some(raw), None) => serde_json::Value::String(expand_source(raw)?),
+                (None, Some(raw)) => serde_json::from_str(&expand_source(raw)?)
+                    .context("Invalid JSON passed to --state-json")?,
+                _ => unreachable!("state exclusivity checked above"),
+            };
 
             let mut questions = BTreeMap::new();
 
@@ -360,31 +378,24 @@ impl Cli {
     }
 }
 
-/// Reads quick-mode state text: `@path` loads a file, `-` reads piped
-/// stdin, anything else parses as JSON or falls back to a plain string.
-fn read_quick_state(raw: &str) -> Result<serde_json::Value> {
+/// Expands a quick-mode state source: `@path` loads a file, `-` reads
+/// piped stdin, anything else passes through verbatim.
+fn expand_source(raw: &str) -> Result<String> {
     if let Some(path) = raw.strip_prefix('@') {
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read state file {}", path))?;
-        return Ok(parse_state_value(&content));
+        return std::fs::read_to_string(path)
+            .with_context(|| format!("Failed to read state file {}", path));
     }
     if raw == "-" {
         if io::stdin().is_terminal() {
-            bail!("--state - requires piped stdin");
+            bail!("Reading state from stdin requires piped stdin");
         }
         let mut buffer = String::new();
         io::stdin()
             .read_to_string(&mut buffer)
             .context("Failed to read state from stdin")?;
-        return Ok(parse_state_value(&buffer));
+        return Ok(buffer);
     }
-    Ok(parse_state_value(raw))
-}
-
-/// Parses state text as JSON, falling back to a plain string.
-fn parse_state_value(raw: &str) -> serde_json::Value {
-    serde_json::from_str::<serde_json::Value>(raw)
-        .unwrap_or_else(|_| serde_json::Value::String(raw.to_string()))
+    Ok(raw.to_string())
 }
 
 /// Splits flag input of format `id:instructions` into constituent parts.
@@ -431,6 +442,7 @@ mod tests {
             pretty: false,
             decision_only: false,
             state: None,
+            state_json: None,
             choice: None,
             options: vec![],
             noul: vec![],
@@ -674,6 +686,50 @@ mod tests {
     }
 
     #[test]
+    fn test_state_stays_literal_string() {
+        let cli = Cli {
+            state: Some("123".to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
+            ..test_cli()
+        };
+        let req = cli.build_request().unwrap();
+        assert_eq!(req.state, serde_json::Value::String("123".to_string()));
+    }
+
+    #[test]
+    fn test_state_json_parses() {
+        let cli = Cli {
+            state_json: Some(r#"{"load": 0.9}"#.to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
+            ..test_cli()
+        };
+        let req = cli.build_request().unwrap();
+        assert_eq!(req.state["load"], serde_json::json!(0.9));
+    }
+
+    #[test]
+    fn test_state_json_rejects_invalid_json() {
+        let cli = Cli {
+            state_json: Some("not json".to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
+            ..test_cli()
+        };
+        let err = cli.build_request().unwrap_err().to_string();
+        assert!(err.contains("Invalid JSON passed to --state-json"));
+    }
+
+    #[test]
+    fn test_state_conflicts_with_state_json() {
+        let cli = Cli {
+            state: Some("state".to_string()),
+            state_json: Some("{}".to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
+            ..test_cli()
+        };
+        assert!(cli.build_request().is_err());
+    }
+
+    #[test]
     fn test_state_at_file_reads_contents() {
         let path = std::env::temp_dir().join("jeb_test_state_plain.txt");
         std::fs::write(&path, "plain state text").unwrap();
@@ -691,11 +747,11 @@ mod tests {
     }
 
     #[test]
-    fn test_state_at_file_parses_json() {
-        let path = std::env::temp_dir().join("jeb_test_state_json.txt");
+    fn test_state_json_at_file_parses() {
+        let path = std::env::temp_dir().join("jeb_test_state_json2.txt");
         std::fs::write(&path, r#"{"load": 0.9}"#).unwrap();
         let cli = Cli {
-            state: Some(format!("@{}", path.display())),
+            state_json: Some(format!("@{}", path.display())),
             noul: vec!["safe:Is it safe?".to_string()],
             ..test_cli()
         };

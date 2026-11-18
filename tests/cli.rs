@@ -127,7 +127,7 @@ fn state_dash_reads_piped_stdin() {
 fn state_at_file_loads_request_state() {
     let (ok, stdout, _) = stderr_of(
         jeb()
-            .arg("--state")
+            .arg("--state-json")
             .arg("@fixtures/req_ping.json")
             .arg("--noul")
             .arg("safe:Is it safe?")

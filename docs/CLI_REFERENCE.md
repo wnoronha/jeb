@@ -20,7 +20,8 @@
 | `--fail` | — | `false` | Exit 1 when any noul decision is no; output still prints |
 | `-q`, `--quiet` | — | `false` | Suppress normal output; errors still print |
 | `-f`, `--file` | — | — | Read input JSON from file |
-| `--state` | — | — | State text/JSON, `@file`, or `-` for stdin |
+| `--state` | — | — | Literal state text, `@file`, or `-` for stdin |
+| `--state-json` | — | — | State JSON (must parse), `@file`, or `-`; conflicts with `--state` |
 | `--choice` | — | — | `ID:Instructions` for choice |
 | `--option` | — | — | `key=Description` (repeatable; bare key uses itself as description) |
 | `--noul` | — | — | `ID:Instructions` for yes/no (repeatable) |
