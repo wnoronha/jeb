@@ -74,8 +74,9 @@ pub struct Cli {
     pub options: Vec<String>,
 
     /// Add a noul (yes/no) question: ID and instructions (e.g. --noul "is_safe:Is this action safe to execute?")
-    #[arg(long, value_name = "ID:INSTRUCTIONS")]
-    pub noul: Option<String>,
+    /// Repeatable for multiple questions. --noul-true and --noul-false need exactly one --noul.
+    #[arg(long, value_name = "ID:INSTRUCTIONS", action = ArgAction::Append)]
+    pub noul: Vec<String>,
 
     /// Description for the yes outcome of a noul question
     #[arg(long, value_name = "DESC")]
@@ -86,8 +87,9 @@ pub struct Cli {
     pub noul_false: Option<String>,
 
     /// Add a score question: ID and instructions (e.g. --score "urgency:Rate urgency from 0 to 2")
-    #[arg(long, value_name = "ID:INSTRUCTIONS")]
-    pub score: Option<String>,
+    /// Repeatable for multiple questions. --level needs exactly one --score.
+    #[arg(long, value_name = "ID:INSTRUCTIONS", action = ArgAction::Append)]
+    pub score: Vec<String>,
 
     /// Level descriptions for score question (repeatable or comma-separated)
     #[arg(long = "level", action = ArgAction::Append)]
@@ -120,7 +122,7 @@ impl Cli {
         if !self.options.is_empty() {
             dropped.push("--option");
         }
-        if self.noul.is_some() {
+        if !self.noul.is_empty() {
             dropped.push("--noul");
         }
         if self.noul_true.is_some() {
@@ -129,7 +131,7 @@ impl Cli {
         if self.noul_false.is_some() {
             dropped.push("--noul-false");
         }
-        if self.score.is_some() {
+        if !self.score.is_empty() {
             dropped.push("--score");
         }
         if !self.levels.is_empty() {
@@ -164,7 +166,7 @@ impl Cli {
         }
 
         let has_question_flag =
-            self.choice.is_some() || self.noul.is_some() || self.score.is_some();
+            self.choice.is_some() || !self.noul.is_empty() || !self.score.is_empty();
         if self.state.is_none() {
             if has_question_flag {
                 bail!("Question flags (--choice, --noul, --score) require --state");
@@ -182,11 +184,17 @@ impl Cli {
             if self.choice.is_none() && !self.options.is_empty() {
                 bail!("--option requires --choice");
             }
-            if self.score.is_none() && !self.levels.is_empty() {
+            if self.score.is_empty() && !self.levels.is_empty() {
                 bail!("--level requires --score");
             }
-            if self.noul.is_none() && (self.noul_true.is_some() || self.noul_false.is_some()) {
+            if self.noul.is_empty() && (self.noul_true.is_some() || self.noul_false.is_some()) {
                 bail!("--noul-true and --noul-false require --noul");
+            }
+            if (self.noul_true.is_some() || self.noul_false.is_some()) && self.noul.len() != 1 {
+                bail!("--noul-true and --noul-false require exactly one --noul");
+            }
+            if !self.levels.is_empty() && self.score.len() != 1 {
+                bail!("--level requires exactly one --score");
             }
             if self.file.is_some() || self.input.is_some() {
                 bail!("--state cannot be combined with --file or JSON input");
@@ -238,7 +246,7 @@ impl Cli {
                 );
             }
 
-            if let Some(noul_spec) = &self.noul {
+            for noul_spec in &self.noul {
                 let (id, instructions) = split_id_and_instructions(noul_spec, "noul")?;
                 let criteria = match (&self.noul_true, &self.noul_false) {
                     (None, None) => None,
@@ -263,7 +271,7 @@ impl Cli {
                 );
             }
 
-            if let Some(score_spec) = &self.score {
+            for score_spec in &self.score {
                 let (id, instructions) = split_id_and_instructions(score_spec, "score")?;
                 let mut criteria = Vec::new();
                 for lvl in &self.levels {
@@ -387,12 +395,13 @@ mod tests {
             state: None,
             choice: None,
             options: vec![],
-            noul: None,
+            noul: vec![],
             noul_true: None,
             noul_false: None,
             provider: Provider::Typesafe,
             list_models: false,
-            score: None,
+            dry_run: false,
+            score: vec![],
             levels: vec![],
         }
     }
@@ -409,7 +418,7 @@ mod tests {
                 "auth=Password and authentication".to_string(),
                 "billing=Billing questions".to_string(),
             ],
-            noul: Some("is_clear:Is the request clear?".to_string()),
+            noul: vec!["is_clear:Is the request clear?".to_string()],
             ..test_cli()
         };
 
@@ -440,7 +449,7 @@ mod tests {
             state: Some("state".to_string()),
             choice: Some("task:Do this".to_string()),
             options: vec!["a=First".to_string()],
-            noul: Some("task:Is it done?".to_string()),
+            noul: vec!["task:Is it done?".to_string()],
             ..test_cli()
         };
         assert!(cli.build_request().is_err());
@@ -471,7 +480,7 @@ mod tests {
         let cli = Cli {
             state: Some("state".to_string()),
             options: vec!["a=First".to_string()],
-            noul: Some("safe:Is it safe?".to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
             ..test_cli()
         };
         assert!(cli.build_request().is_err());
@@ -494,7 +503,7 @@ mod tests {
         let cli = Cli {
             state: Some("state".to_string()),
             noul_true: Some("Yes".to_string()),
-            score: Some("risk:Rate it".to_string()),
+            score: vec!["risk:Rate it".to_string()],
             levels: vec!["Low".to_string(), "High".to_string()],
             ..test_cli()
         };
@@ -544,7 +553,7 @@ mod tests {
         let cli = Cli {
             timeout: 0,
             state: Some("state".to_string()),
-            noul: Some("safe:Is it safe?".to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
             ..test_cli()
         };
         let err = cli.build_request().unwrap_err().to_string();
@@ -556,7 +565,7 @@ mod tests {
         let cli = Cli {
             list_models: true,
             state: Some("state".to_string()),
-            noul: Some("safe:Is it safe?".to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
             ..test_cli()
         };
         let err = cli.reject_list_mode_conflicts().unwrap_err().to_string();
@@ -573,12 +582,44 @@ mod tests {
     }
 
     #[test]
+    fn test_repeatable_noul_and_score() {
+        let cli = Cli {
+            state: Some("state".to_string()),
+            noul: vec!["a:Is it safe?".to_string(), "b:Is it cheap?".to_string()],
+            score: vec!["x:Rate x".to_string()],
+            levels: vec!["Low".to_string(), "High".to_string()],
+            ..test_cli()
+        };
+        let req = cli.build_request().unwrap();
+        assert_eq!(req.questions.len(), 3);
+    }
+
+    #[test]
+    fn test_labels_require_single_question() {
+        let cli = Cli {
+            state: Some("state".to_string()),
+            noul: vec!["a:Is it safe?".to_string(), "b:Is it cheap?".to_string()],
+            noul_true: Some("Yes".to_string()),
+            ..test_cli()
+        };
+        assert!(cli.build_request().is_err());
+
+        let cli = Cli {
+            state: Some("state".to_string()),
+            score: vec!["x:Rate x".to_string(), "y:Rate y".to_string()],
+            levels: vec!["Low".to_string(), "High".to_string()],
+            ..test_cli()
+        };
+        assert!(cli.build_request().is_err());
+    }
+
+    #[test]
     fn test_noul_criteria_flags() {
         let cli = Cli {
             model: Some("jev-latest".to_string()),
             base_url: Some("https://api.typesafe.ai".to_string()),
             state: Some("state".to_string()),
-            noul: Some("safe:Is it safe?".to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
             noul_true: Some("Safe to proceed".to_string()),
             noul_false: Some("Unsafe".to_string()),
             ..test_cli()
