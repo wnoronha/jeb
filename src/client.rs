@@ -69,7 +69,6 @@ impl DecisionsClient {
             .client
             .post(&endpoint)
             .bearer_auth(&self.api_key)
-            .header("Content-Type", "application/json")
             .header("User-Agent", user_agent);
         if self.provider == Provider::Openrouter {
             call = call

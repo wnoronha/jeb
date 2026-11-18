@@ -5,7 +5,6 @@
 
 use jeb::build_decision_value;
 use jeb::types::{Answer, Question, SystemOneRequest, SystemOneResponse};
-use jeb::validate_request;
 
 macro_rules! live_fixture_test {
     ($name:ident, $req:expr, $resp:expr, $choice:expr, $noul:expr, $score:expr, $model:expr) => {
@@ -250,7 +249,7 @@ fn assert_live_fixture(
     expected_model: &str,
 ) {
     let req: SystemOneRequest = serde_json::from_str(req_json).unwrap();
-    validate_request(&req).unwrap();
+    req.validate().unwrap();
     assert!(matches!(
         req.questions.get(choice_id).unwrap(),
         Question::Choice { .. }
@@ -289,7 +288,7 @@ fn assert_live_fixture(
 
 fn assert_noul_fixture(req_json: &str, resp_json: &str, id: &str, expected_model: &str) {
     let req: SystemOneRequest = serde_json::from_str(req_json).unwrap();
-    validate_request(&req).unwrap();
+    req.validate().unwrap();
     assert!(matches!(
         req.questions.get(id).unwrap(),
         Question::Noul { .. }
