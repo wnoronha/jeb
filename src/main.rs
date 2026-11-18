@@ -15,6 +15,9 @@ fn main() -> Result<()> {
     let provider = cli.provider;
 
     if cli.list_models {
+        if cli.dry_run {
+            bail!("--dry-run cannot be combined with --list-models");
+        }
         cli.reject_list_mode_conflicts()?;
         if provider != Provider::Openrouter {
             bail!("Model listing is only supported with --provider openrouter.");
@@ -35,6 +38,15 @@ fn main() -> Result<()> {
     }
 
     let request = cli.build_request()?;
+
+    if cli.dry_run {
+        if cli.pretty {
+            println!("{}", serde_json::to_string_pretty(&request)?);
+        } else {
+            println!("{}", serde_json::to_string(&request)?);
+        }
+        return Ok(());
+    }
 
     let api_key =
         resolve_api_key(cli.api_key.clone(), provider.api_key_env()).ok_or_else(|| {

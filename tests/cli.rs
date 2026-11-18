@@ -90,6 +90,35 @@ fn list_models_rejects_typesafe_provider() {
 }
 
 #[test]
+fn dry_run_prints_request_without_calling() {
+    let (ok, stdout, _) = stderr_of(
+        jeb()
+            .arg("--state")
+            .arg("state")
+            .arg("--noul")
+            .arg("safe:Is it safe?")
+            .arg("--dry-run"),
+    );
+    assert!(ok);
+    let body: serde_json::Value =
+        serde_json::from_str(&stdout).expect("dry run printed invalid JSON");
+    assert!(body["questions"]["safe"]["instructions"] == "Is it safe?");
+}
+
+#[test]
+fn dry_run_rejects_list_models() {
+    let (ok, _, stderr) = stderr_of(
+        jeb()
+            .arg("--provider")
+            .arg("openrouter")
+            .arg("--list-models")
+            .arg("--dry-run"),
+    );
+    assert!(!ok);
+    assert!(stderr.contains("--dry-run cannot be combined"));
+}
+
+#[test]
 fn list_models_rejects_evaluation_flags() {
     let (ok, _, stderr) = stderr_of(
         jeb()

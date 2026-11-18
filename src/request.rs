@@ -98,6 +98,10 @@ pub struct Cli {
     /// List available decision models and exit
     #[arg(long, default_value_t = false)]
     pub list_models: bool,
+
+    /// Print the built request JSON and exit without calling the API
+    #[arg(long, default_value_t = false)]
+    pub dry_run: bool,
 }
 
 impl Cli {
