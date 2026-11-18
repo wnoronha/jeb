@@ -15,6 +15,7 @@ fn main() -> Result<()> {
     let provider = cli.provider;
 
     if cli.list_models {
+        cli.reject_list_mode_conflicts()?;
         if provider != Provider::Openrouter {
             bail!("Model listing is only supported with --provider openrouter.");
         }

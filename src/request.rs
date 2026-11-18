@@ -99,6 +99,58 @@ pub struct Cli {
 }
 
 impl Cli {
+    /// Rejects evaluation flags that `--list-models` silently drops.
+    pub fn reject_list_mode_conflicts(&self) -> Result<()> {
+        if !self.list_models {
+            return Ok(());
+        }
+        let mut dropped = Vec::new();
+        if self.input.is_some() {
+            dropped.push("positional JSON input");
+        }
+        if self.file.is_some() {
+            dropped.push("--file");
+        }
+        if self.state.is_some() {
+            dropped.push("--state");
+        }
+        if self.choice.is_some() {
+            dropped.push("--choice");
+        }
+        if !self.options.is_empty() {
+            dropped.push("--option");
+        }
+        if self.noul.is_some() {
+            dropped.push("--noul");
+        }
+        if self.noul_true.is_some() {
+            dropped.push("--noul-true");
+        }
+        if self.noul_false.is_some() {
+            dropped.push("--noul-false");
+        }
+        if self.score.is_some() {
+            dropped.push("--score");
+        }
+        if !self.levels.is_empty() {
+            dropped.push("--level");
+        }
+        if self.model.is_some() {
+            dropped.push("--model");
+        }
+        if self.decision_only {
+            dropped.push("--decision-only");
+        }
+        if dropped.is_empty() {
+            Ok(())
+        } else {
+            bail!(
+                "--list-models cannot be combined with evaluation flags: {}",
+                dropped.join(", ")
+            );
+        }
+    }
+
     /// Builds a validated `SystemOneRequest` from CLI inputs.
     pub fn build_request(&self) -> Result<SystemOneRequest> {
         if self.timeout == 0 {
@@ -497,6 +549,27 @@ mod tests {
         };
         let err = cli.build_request().unwrap_err().to_string();
         assert!(err.contains("greater than zero"));
+    }
+
+    #[test]
+    fn test_list_mode_rejects_evaluation_flags() {
+        let cli = Cli {
+            list_models: true,
+            state: Some("state".to_string()),
+            noul: Some("safe:Is it safe?".to_string()),
+            ..test_cli()
+        };
+        let err = cli.reject_list_mode_conflicts().unwrap_err().to_string();
+        assert!(err.contains("--list-models cannot be combined"));
+
+        let clean = Cli {
+            list_models: true,
+            ..test_cli()
+        };
+        assert!(clean.reject_list_mode_conflicts().is_ok());
+
+        let evaluating = test_cli();
+        assert!(evaluating.reject_list_mode_conflicts().is_ok());
     }
 
     #[test]
