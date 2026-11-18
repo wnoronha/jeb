@@ -214,8 +214,7 @@ impl Cli {
         }
         // 1. If quick CLI flags are provided, construct request from flags
         if let Some(state_raw) = &self.state {
-            let state_val = serde_json::from_str::<serde_json::Value>(state_raw)
-                .unwrap_or_else(|_| serde_json::Value::String(state_raw.clone()));
+            let state_val = read_quick_state(state_raw)?;
 
             let mut questions = BTreeMap::new();
 
@@ -359,6 +358,33 @@ impl Cli {
             "No input provided. Provide JSON as an argument, pipe through stdin, use --file, or specify --state and question flags."
         );
     }
+}
+
+/// Reads quick-mode state text: `@path` loads a file, `-` reads piped
+/// stdin, anything else parses as JSON or falls back to a plain string.
+fn read_quick_state(raw: &str) -> Result<serde_json::Value> {
+    if let Some(path) = raw.strip_prefix('@') {
+        let content = std::fs::read_to_string(path)
+            .with_context(|| format!("Failed to read state file {}", path))?;
+        return Ok(parse_state_value(&content));
+    }
+    if raw == "-" {
+        if io::stdin().is_terminal() {
+            bail!("--state - requires piped stdin");
+        }
+        let mut buffer = String::new();
+        io::stdin()
+            .read_to_string(&mut buffer)
+            .context("Failed to read state from stdin")?;
+        return Ok(parse_state_value(&buffer));
+    }
+    Ok(parse_state_value(raw))
+}
+
+/// Parses state text as JSON, falling back to a plain string.
+fn parse_state_value(raw: &str) -> serde_json::Value {
+    serde_json::from_str::<serde_json::Value>(raw)
+        .unwrap_or_else(|_| serde_json::Value::String(raw.to_string()))
 }
 
 /// Splits flag input of format `id:instructions` into constituent parts.
@@ -645,6 +671,57 @@ mod tests {
             }
             _ => panic!("Expected choice question"),
         }
+    }
+
+    #[test]
+    fn test_state_at_file_reads_contents() {
+        let path = std::env::temp_dir().join("jeb_test_state_plain.txt");
+        std::fs::write(&path, "plain state text").unwrap();
+        let cli = Cli {
+            state: Some(format!("@{}", path.display())),
+            noul: vec!["safe:Is it safe?".to_string()],
+            ..test_cli()
+        };
+        let req = cli.build_request().unwrap();
+        assert_eq!(
+            req.state,
+            serde_json::Value::String("plain state text".to_string())
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_state_at_file_parses_json() {
+        let path = std::env::temp_dir().join("jeb_test_state_json.txt");
+        std::fs::write(&path, r#"{"load": 0.9}"#).unwrap();
+        let cli = Cli {
+            state: Some(format!("@{}", path.display())),
+            noul: vec!["safe:Is it safe?".to_string()],
+            ..test_cli()
+        };
+        let req = cli.build_request().unwrap();
+        assert_eq!(req.state["load"], serde_json::json!(0.9));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_state_at_missing_file_errors() {
+        let cli = Cli {
+            state: Some("@/nonexistent-jeb-state-xyz.txt".to_string()),
+            noul: vec!["safe:Is it safe?".to_string()],
+            ..test_cli()
+        };
+        let err = cli.build_request().unwrap_err().to_string();
+        assert!(err.contains("Failed to read state file"));
+    }
+
+    #[test]
+    fn test_state_dash_without_questions_errors() {
+        let cli = Cli {
+            state: Some("-".to_string()),
+            ..test_cli()
+        };
+        assert!(cli.build_request().is_err());
     }
 
     #[test]

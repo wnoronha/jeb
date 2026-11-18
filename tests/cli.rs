@@ -18,6 +18,30 @@ fn stderr_of(cmd: &mut Command) -> (bool, String, String) {
     )
 }
 
+fn jeb_with_stdin(input: &[u8], args: &[&str]) -> (bool, String, String) {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_jeb"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to run jeb binary");
+    child
+        .stdin
+        .take()
+        .expect("stdin pipe")
+        .write_all(input)
+        .expect("failed to write stdin");
+    let out = child.wait_with_output().expect("failed to read jeb output");
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
 #[test]
 fn help_lists_quick_mode_flags() {
     let (ok, stdout, _) = stderr_of(jeb().arg("--help"));
@@ -87,6 +111,45 @@ fn list_models_rejects_typesafe_provider() {
     let (ok, _, stderr) = stderr_of(jeb().arg("--provider").arg("typesafe").arg("--list-models"));
     assert!(!ok);
     assert!(stderr.contains("--provider openrouter"));
+}
+
+#[test]
+fn state_dash_reads_piped_stdin() {
+    let (ok, stdout, _) = jeb_with_stdin(
+        b"disk at 91%",
+        &["--state", "-", "--noul", "safe:Is it safe?", "--dry-run"],
+    );
+    assert!(ok);
+    assert!(stdout.contains("disk at 91%"));
+}
+
+#[test]
+fn state_at_file_loads_request_state() {
+    let (ok, stdout, _) = stderr_of(
+        jeb()
+            .arg("--state")
+            .arg("@fixtures/req_ping.json")
+            .arg("--noul")
+            .arg("safe:Is it safe?")
+            .arg("--dry-run"),
+    );
+    assert!(ok);
+    let body: serde_json::Value =
+        serde_json::from_str(&stdout).expect("dry run printed invalid JSON");
+    assert_eq!(body["state"]["state"], "Production deploy is underway");
+}
+
+#[test]
+fn state_at_missing_file_errors() {
+    let (ok, _, stderr) = stderr_of(
+        jeb()
+            .arg("--state")
+            .arg("@/nonexistent-jeb-state-xyz.txt")
+            .arg("--noul")
+            .arg("safe:Is it safe?"),
+    );
+    assert!(!ok);
+    assert!(stderr.contains("Failed to read state file"));
 }
 
 #[test]
