@@ -106,6 +106,10 @@ pub struct Cli {
     /// Exit 1 when any noul decision is no. Output still prints.
     #[arg(long, default_value_t = false)]
     pub fail: bool,
+
+    /// Suppress normal output. Errors still print.
+    #[arg(short, long, default_value_t = false)]
+    pub quiet: bool,
 }
 
 impl Cli {
@@ -410,6 +414,7 @@ mod tests {
             list_models: false,
             dry_run: false,
             fail: false,
+            quiet: false,
             score: vec![],
             levels: vec![],
         }

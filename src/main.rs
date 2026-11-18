@@ -29,10 +29,12 @@ fn main() -> Result<()> {
         );
         let api_key = resolve_api_key(cli.api_key.clone(), provider.api_key_env());
         let models = fetch_openrouter_models(&base_url, api_key.as_deref(), cli.timeout)?;
-        if cli.pretty {
-            println!("{}", serde_json::to_string_pretty(&models)?);
-        } else {
-            println!("{}", serde_json::to_string(&models)?);
+        if !cli.quiet {
+            if cli.pretty {
+                println!("{}", serde_json::to_string_pretty(&models)?);
+            } else {
+                println!("{}", serde_json::to_string(&models)?);
+            }
         }
         return Ok(());
     }
@@ -40,10 +42,12 @@ fn main() -> Result<()> {
     let request = cli.build_request()?;
 
     if cli.dry_run {
-        if cli.pretty {
-            println!("{}", serde_json::to_string_pretty(&request)?);
-        } else {
-            println!("{}", serde_json::to_string(&request)?);
+        if !cli.quiet {
+            if cli.pretty {
+                println!("{}", serde_json::to_string_pretty(&request)?);
+            } else {
+                println!("{}", serde_json::to_string(&request)?);
+            }
         }
         return Ok(());
     }
@@ -64,12 +68,14 @@ fn main() -> Result<()> {
     let client = DecisionsClient::new(api_key, Some(base_url), cli.timeout, provider)?;
     let response = client.evaluate(&request)?;
 
-    if cli.decision_only {
-        println!("{}", render_summary(&response, cli.pretty)?);
-    } else if cli.pretty {
-        println!("{}", serde_json::to_string_pretty(&response)?);
-    } else {
-        println!("{}", serde_json::to_string(&response)?);
+    if !cli.quiet {
+        if cli.decision_only {
+            println!("{}", render_summary(&response, cli.pretty)?);
+        } else if cli.pretty {
+            println!("{}", serde_json::to_string_pretty(&response)?);
+        } else {
+            println!("{}", serde_json::to_string(&response)?);
+        }
     }
 
     if cli.fail && has_failing_noul(&response) {

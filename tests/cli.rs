@@ -90,6 +90,21 @@ fn list_models_rejects_typesafe_provider() {
 }
 
 #[test]
+fn quiet_dry_run_prints_nothing() {
+    let (ok, stdout, _) = stderr_of(
+        jeb()
+            .arg("--state")
+            .arg("state")
+            .arg("--noul")
+            .arg("safe:Is it safe?")
+            .arg("--dry-run")
+            .arg("--quiet"),
+    );
+    assert!(ok);
+    assert!(stdout.is_empty());
+}
+
+#[test]
 fn dry_run_prints_request_without_calling() {
     let (ok, stdout, _) = stderr_of(
         jeb()

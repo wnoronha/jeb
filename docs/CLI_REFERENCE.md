@@ -18,6 +18,7 @@
 | `--list-models` | — | `false` | List OpenRouter decision models and exit |
 | `--dry-run` | — | `false` | Print the built request and exit without calling |
 | `--fail` | — | `false` | Exit 1 when any noul decision is no; output still prints |
+| `-q`, `--quiet` | — | `false` | Suppress normal output; errors still print |
 | `-f`, `--file` | — | — | Read input JSON from file |
 | `--state` | — | — | State text/JSON for quick mode |
 | `--choice` | — | — | `ID:Instructions` for choice |
