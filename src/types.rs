@@ -1,5 +1,6 @@
 //! Data types and schemas for TypeSafe AI System One requests and responses.
 
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -166,6 +167,118 @@ pub struct SystemOneRequest {
 
 fn default_model() -> String {
     "jev-latest".to_string()
+}
+
+impl SystemOneRequest {
+    /// Structural rules shared by quick-mode and JSON inputs.
+    pub fn validate(&self) -> Result<()> {
+        if let Value::String(text) = &self.state {
+            if text.trim().is_empty() {
+                bail!("Payload state must not be blank");
+            }
+        }
+        if self.questions.is_empty() {
+            bail!("Payload must contain at least one question");
+        }
+        for (id, question) in &self.questions {
+            let instructions = match question {
+                Question::Choice { instructions, .. }
+                | Question::Noul { instructions, .. }
+                | Question::Score { instructions, .. } => instructions,
+            };
+            match instructions {
+                Value::Null => {
+                    bail!("Question '{}' instructions must not be null", id);
+                }
+                Value::String(text) if text.trim().is_empty() => {
+                    bail!("Question '{}' instructions must not be blank", id);
+                }
+                Value::String(_) | Value::Object(_) => {}
+                _ => {
+                    bail!("Question '{}' instructions must be a string or object", id);
+                }
+            }
+            match question {
+                Question::Choice { criteria, .. } => {
+                    if criteria.is_empty() {
+                        bail!(
+                            "Choice question '{}' requires at least one criteria entry",
+                            id
+                        );
+                    }
+                    for key in criteria.keys() {
+                        if key.trim().is_empty() {
+                            bail!("Choice question '{}' has a blank option key", id);
+                        }
+                    }
+                }
+                Question::Score { criteria, .. } => {
+                    if criteria.len() < 2 {
+                        bail!(
+                            "Score question '{}' requires at least 2 criteria levels",
+                            id
+                        );
+                    }
+                    for level in criteria {
+                        match level {
+                            Value::Null => {
+                                bail!("Score question '{}' has a null level", id);
+                            }
+                            Value::String(text) if text.trim().is_empty() => {
+                                bail!("Score question '{}' has a blank level", id);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Parses raw JSON and applies the resolved model.
+    /// An explicit flag or env model overrides the payload field.
+    /// Otherwise the payload field applies when present and non-empty.
+    pub fn from_json(raw: &str, default_model: &str, model_explicit: bool) -> Result<Self> {
+        let mut val: Value =
+            serde_json::from_str(raw).context("Invalid JSON payload passed to jeb")?;
+
+        {
+            let obj = val.as_object_mut().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Invalid payload: top-level JSON must be an object with state and questions"
+                )
+            })?;
+            match obj.get("model") {
+                None => {
+                    obj.insert(
+                        "model".to_string(),
+                        Value::String(default_model.to_string()),
+                    );
+                }
+                Some(Value::String(text)) => {
+                    if text.trim().is_empty() {
+                        bail!("Invalid payload: \"model\" must not be blank");
+                    }
+                    if model_explicit {
+                        obj.insert(
+                            "model".to_string(),
+                            Value::String(default_model.to_string()),
+                        );
+                    }
+                }
+                Some(_) => {
+                    bail!("Invalid payload: \"model\" must be a non-empty string");
+                }
+            }
+        }
+
+        let req: SystemOneRequest = serde_json::from_value(val)
+            .context("Failed to deserialize payload into SystemOneRequest format")?;
+        req.validate()?;
+        Ok(req)
+    }
 }
 
 /// A question evaluated by System One.
