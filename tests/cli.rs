@@ -88,3 +88,17 @@ fn list_models_rejects_typesafe_provider() {
     assert!(!ok);
     assert!(stderr.contains("--provider openrouter"));
 }
+
+#[test]
+fn list_models_rejects_evaluation_flags() {
+    let (ok, _, stderr) = stderr_of(
+        jeb()
+            .arg("--provider")
+            .arg("openrouter")
+            .arg("--list-models")
+            .arg("--option")
+            .arg("foo"),
+    );
+    assert!(!ok);
+    assert!(stderr.contains("--list-models cannot be combined"));
+}
